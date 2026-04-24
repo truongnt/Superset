@@ -1,0 +1,6 @@
+{
+  "npmName": "superset-plugin-chart-ecds-region-map",
+  "exportName": "EcdsRegionMapPlugin",
+  "chartKey": "ecds_region_map",
+  "staticAssets": "maps"
+}

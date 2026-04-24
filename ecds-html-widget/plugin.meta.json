@@ -1,0 +1,5 @@
+{
+  "npmName": "superset-plugin-chart-ecds-html-widget",
+  "exportName": "EcdsHtmlWidgetPlugin",
+  "chartKey": "ecds_html_widget"
+}

@@ -1,0 +1,5 @@
+{
+  "npmName": "superset-plugin-chart-ecds-point-map",
+  "exportName": "EcdsPointMapPlugin",
+  "chartKey": "ecds_point_map"
+}
