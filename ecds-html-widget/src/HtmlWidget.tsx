@@ -1,4 +1,6 @@
-import { useMemo, useRef, useEffect, useState, useCallback } from 'react';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
+// @ts-ignore
+import html2canvasSource from '!!raw-loader!html2canvas/dist/html2canvas.min.js';
 import { EcdsHtmlWidgetProps } from './types';
 
 // ─── Template engine ─────────────────────────────────────────────────────────
@@ -18,91 +20,78 @@ function applyPlaceholders(
   });
 }
 
-function buildSrcdoc(props: EcdsHtmlWidgetProps): string {
+// ─── Build srcdoc cho iframe ─────────────────────────────────────────────────
+
+function buildSrcdoc(props: EcdsHtmlWidgetProps, widgetId: string): string {
   const { htmlTemplate, rows, firstRow, metricLabels, columnNames } = props;
 
   const dataJson    = JSON.stringify(rows);
   const metricsJson = JSON.stringify(metricLabels);
   const colsJson    = JSON.stringify(columnNames);
 
-  const injectedScript = `<script>
+  // Inject html2canvas + data + script tự chụp và gửi ra ngoài qua postMessage
+  // widgetId được nhúng vào để parent phân biệt screenshot từ widget nào
+  const injectedScript = `
+<script>
+${html2canvasSource}
+</script>
+<script>
 (function () {
+  var WIDGET_ID = '${widgetId}';
   window.__chartData    = ${dataJson};
   window.__metricLabels = ${metricsJson};
   window.__columnNames  = ${colsJson};
   window.DATA  = window.__chartData;
   window.FIRST = window.__chartData[0] || {};
+
+  function captureAndSend() {
+    html2canvas(document.body, {
+      backgroundColor: '#ffffff',
+      scale: 1,
+      useCORS: true,
+      logging: false,
+    }).then(function(canvas) {
+      var dataUrl = canvas.toDataURL('image/png');
+      window.parent.postMessage({ type: 'ecds-screenshot', widgetId: WIDGET_ID, dataUrl: dataUrl }, '*');
+    }).catch(function(e) {
+      window.parent.postMessage({ type: 'ecds-screenshot-error', widgetId: WIDGET_ID, error: String(e) }, '*');
+    });
+  }
+
+  if (document.readyState === 'complete') {
+    setTimeout(captureAndSend, 300);
+  } else {
+    window.addEventListener('load', function() {
+      setTimeout(captureAndSend, 300);
+    });
+  }
 })();
 </script>`;
 
   const resolvedHtml = applyPlaceholders(htmlTemplate, firstRow);
-
-  const isFullDoc =
-    /<html[\s>]/i.test(resolvedHtml) || /<!doctype/i.test(resolvedHtml);
+  const isFullDoc = /<html[\s>]/i.test(resolvedHtml) || /<!doctype/i.test(resolvedHtml);
 
   if (isFullDoc) {
-    if (/<head[\s>]/i.test(resolvedHtml)) {
-      return resolvedHtml.replace(/(<head[^>]*>)/i, `$1\n${injectedScript}\n`);
+    if (/<\/body>/i.test(resolvedHtml)) {
+      return resolvedHtml.replace(/<\/body>/i, `${injectedScript}\n</body>`);
     }
-    return resolvedHtml.replace(/<body[^>]*>/i, `$&\n${injectedScript}\n`);
+    return resolvedHtml + injectedScript;
   }
 
   return `<!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Segoe UI', Arial, sans-serif;
-      font-size: 14px;
-      color: #222;
-      background: transparent;
-      padding: 0;
-    }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px; color: #222; background: #fff; }
   </style>
-  ${injectedScript}
 </head>
 <body>
 ${resolvedHtml}
+${injectedScript}
 </body>
 </html>`;
-}
-
-// ─── Build HTML thuần cho print div (không dùng iframe) ──────────────────────
-// html2canvas capture được div trực tiếp, không capture được iframe.
-
-function buildPrintHtml(props: EcdsHtmlWidgetProps): string {
-  const { htmlTemplate, rows, firstRow, metricLabels, columnNames } = props;
-
-  const resolvedHtml = applyPlaceholders(htmlTemplate, firstRow);
-
-  // Lấy phần body content, bỏ <html>/<head>/<body> wrapper
-  let bodyContent = resolvedHtml;
-  const bodyMatch = resolvedHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-  if (bodyMatch) {
-    bodyContent = bodyMatch[1];
-  } else if (/<html[\s>]/i.test(resolvedHtml) || /<!doctype/i.test(resolvedHtml)) {
-    bodyContent = resolvedHtml
-      .replace(/<!doctype[^>]*>/i, '')
-      .replace(/<html[^>]*>/i, '')
-      .replace(/<\/html>/i, '')
-      .replace(/<head[\s\S]*?<\/head>/i, '');
-  }
-
-  // Inject data vào window trước khi các script trong template chạy
-  const dataInit = `<script>
-(function(){
-  window.__chartData    = ${JSON.stringify(rows)};
-  window.__metricLabels = ${JSON.stringify(metricLabels)};
-  window.__columnNames  = ${JSON.stringify(columnNames)};
-  window.DATA  = window.__chartData;
-  window.FIRST = window.__chartData[0] || {};
-})();
-</script>`;
-
-  return `${dataInit}${bodyContent}`;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -110,68 +99,53 @@ function buildPrintHtml(props: EcdsHtmlWidgetProps): string {
 export default function HtmlWidget(props: EcdsHtmlWidgetProps) {
   const { width, height, htmlTemplate } = props;
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const printRef  = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // isPrinting = true khi dom-to-pdf (Export to PDF) đang capture
-  const [isPrinting, setIsPrinting] = useState(false);
+  // ID duy nhất cho mỗi widget instance — tránh nhận nhầm postMessage
+  const widgetId = useRef<string>('ecds-' + Math.random().toString(36).slice(2));
 
-  const srcdoc    = useMemo(() => buildSrcdoc(props), [
+  const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
+
+  const srcdoc = useMemo(() => buildSrcdoc(props, widgetId.current), [
     props.htmlTemplate, props.rows, props.firstRow,
     props.metricLabels, props.columnNames,
   ]);
 
-  const printHtml = useMemo(() => buildPrintHtml(props), [
-    props.htmlTemplate, props.rows, props.firstRow,
-    props.metricLabels, props.columnNames,
-  ]);
-
-  // ── Detect khi Superset bắt đầu export PDF ──────────────────────────────
-  // Superset 4.x dùng dom-to-pdf → html2canvas. Trước khi chụp, dom-to-pdf
-  // clone DOM và thêm style vào <head>. Detect bằng MutationObserver trên
-  // <head> hoặc lắng nghe CustomEvent 'exportDashboard' mà một số Superset
-  // version dispatch.
+  // Nhận postMessage từ iframe — chỉ xử lý nếu widgetId khớp
   useEffect(() => {
-    // Phương án 1: window events (một số browser/version hỗ trợ)
-    const onBefore = () => setIsPrinting(true);
-    const onAfter  = () => setIsPrinting(false);
-    window.addEventListener('beforeprint', onBefore);
-    window.addEventListener('afterprint',  onAfter);
-
-    // Phương án 2: MutationObserver detect khi dom-to-pdf thêm style clone
-    // dom-to-pdf tạo element canvas tạm thời ở body level
-    const observer = new MutationObserver(mutations => {
-      for (const m of mutations) {
-        for (const node of Array.from(m.addedNodes)) {
-          if (
-            node instanceof HTMLElement &&
-            (node.tagName === 'CANVAS' ||
-              node.classList?.contains('dom-to-pdf') ||
-              node.id?.includes('html2canvas'))
-          ) {
-            setIsPrinting(true);
-            // Auto reset sau khi capture xong (~3s)
-            setTimeout(() => setIsPrinting(false), 3000);
-          }
-        }
-      }
-    });
-    observer.observe(document.body, { childList: true });
-
-    // Phương án 3: Superset dispatch CustomEvent trước khi export
-    // (tuỳ version, không đảm bảo nhưng thêm cho chắc)
-    const onExport = () => {
-      setIsPrinting(true);
-      setTimeout(() => setIsPrinting(false), 5000);
+    const onMessage = (event: MessageEvent) => {
+      if (!event.data || event.data.type !== 'ecds-screenshot') return;
+      if (event.data.widgetId !== widgetId.current) return; // bỏ qua widget khác
+      setScreenshotUrl(event.data.dataUrl);
     };
-    window.addEventListener('superset-export-pdf', onExport as EventListener);
-
-    return () => {
-      window.removeEventListener('beforeprint', onBefore);
-      window.removeEventListener('afterprint',  onAfter);
-      window.removeEventListener('superset-export-pdf', onExport as EventListener);
-      observer.disconnect();
-    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
   }, []);
+
+  // Reset khi data thay đổi
+  useEffect(() => {
+    setScreenshotUrl(null);
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      ctx?.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }, [srcdoc]);
+
+  // Vẽ screenshot lên canvas
+  useEffect(() => {
+    if (!screenshotUrl || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const img = new Image();
+    img.onload = () => {
+      canvas.width  = img.naturalWidth  || (width as number);
+      canvas.height = img.naturalHeight || (height as number);
+      ctx.drawImage(img, 0, 0);
+    };
+    img.src = screenshotUrl;
+  }, [screenshotUrl, width, height]);
 
   // Resize iframe theo nội dung
   useEffect(() => {
@@ -188,18 +162,6 @@ export default function HtmlWidget(props: EcdsHtmlWidgetProps) {
     iframe.addEventListener('load', onLoad);
     return () => iframe.removeEventListener('load', onLoad);
   }, [srcdoc, height]);
-
-  // Chạy inline scripts trong printRef sau khi dangerouslySetInnerHTML render
-  useEffect(() => {
-    if (!isPrinting || !printRef.current) return;
-    const container = printRef.current;
-    // Re-execute inline scripts vì dangerouslySetInnerHTML không tự chạy script
-    container.querySelectorAll('script').forEach(oldScript => {
-      const newScript = document.createElement('script');
-      newScript.textContent = oldScript.textContent;
-      oldScript.parentNode?.replaceChild(newScript, oldScript);
-    });
-  }, [isPrinting, printHtml]);
 
   if (!htmlTemplate || !htmlTemplate.trim()) {
     return (
@@ -226,13 +188,14 @@ export default function HtmlWidget(props: EcdsHtmlWidgetProps) {
   return (
     <div style={{ width, height, position: 'relative', overflow: 'hidden' }}>
       {/*
-        NORMAL MODE: iframe — JS đầy đủ, isolated scope.
-        Ẩn khi export (html2canvas không capture được iframe nội dung).
+        iframe: user nhìn thấy, bị exclude khi export PDF nhờ class header-controls
+        (dom-to-pdf của Superset dùng excludeClassNames: ['header-controls'])
       */}
       <iframe
         ref={iframeRef}
         srcDoc={srcdoc}
         title="ecds-html-widget"
+        className="header-controls"
         width={width}
         height={height}
         style={{
@@ -243,32 +206,31 @@ export default function HtmlWidget(props: EcdsHtmlWidgetProps) {
           position: 'absolute',
           top: 0,
           left: 0,
-          visibility: isPrinting ? 'hidden' : 'visible',
         }}
       />
 
       {/*
-        EXPORT MODE: div trực tiếp — html2canvas capture được.
-        Chỉ hiện khi isPrinting = true.
-        Script trong printHtml được re-execute bởi useEffect bên trên.
+        canvas: chứa screenshot từ iframe, được capture bởi dom-to-pdf khi export.
+        opacity: 1 để capture đúng màu — ẩn với user bằng z-index thấp hơn iframe.
+        Khi export, iframe bị exclude (header-controls) → canvas hiện lên trong PDF.
       */}
-      <div
-        ref={printRef}
+      <canvas
+        ref={canvasRef}
+        aria-hidden="true"
+        width={width}
+        height={height}
         style={{
-          width,
-          height,
-          overflow: 'hidden',
-          fontFamily: "'Segoe UI', Arial, sans-serif",
-          fontSize: 14,
-          color: '#222',
-          background: 'transparent',
           position: 'absolute',
           top: 0,
           left: 0,
-          display: isPrinting ? 'block' : 'none',
+          width,
+          height,
+          opacity: 1,           // opacity: 1 để pdf capture đúng màu
+          pointerEvents: 'none',
+          userSelect: 'none',
+          display: 'block',
+          zIndex: 0,            // iframe ở trên (zIndex mặc định cao hơn)
         }}
-        // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: printHtml }}
       />
     </div>
   );
