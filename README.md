@@ -1,51 +1,116 @@
-# Superset Plugin Scaffold
+# ECDS Superset Plugins
 
-This repository is a starter project for building a custom Apache Superset chart plugin with TypeScript.
+Custom Apache Superset chart plugins built for the ECDS Vietnam project. Three production plugins are available in this repository.
 
-## Main structure
+---
 
-- `src/plugin`: metadata, control panel, query builder, transform props
-- `src/HelloWorldChart.tsx`: sample React chart component
-- `src/types.ts`: plugin types
+## Plugins
 
-## Environment
+### 1. ECDS HTML Widget
 
-- Node.js 20.x
-- npm 10.x
+**Package:** `superset-plugin-chart-ecds-html-widget`
+**Chart key:** `ecds_html_widget`
+**Location:** [ecds-html-widget/](ecds-html-widget/)
 
-The current machine does not have `node` or `npm` installed yet, so the scaffold is ready but dependencies have not been installed and the project has not been built.
+Embed custom HTML and JavaScript directly into a Superset dashboard, with full access to the chart's dataset at runtime.
 
-## Start development
+**Capabilities:**
+- Write any HTML/CSS/JS — rendered inside a sandboxed iframe
+- Bind dataset values into the template using `{{column_name}}` placeholders
+- Access all rows via the `window.__chartData` global variable, enabling custom D3, Chart.js, or plain JS visualizations
+- Automatic iframe height adjustment to match content
+- Screenshot and PDF export via html2canvas (canvas rendering mode)
+- Locale-aware number formatting (Vietnamese locale)
+
+**Typical uses:** custom KPI cards, narrative reports, tables with conditional formatting, any visualization not covered by built-in chart types.
+
+![HTML Widget — KPI cards with year-over-year comparison](assets/html-widget.png)
+
+---
+
+### 2. ECDS Point Map
+
+**Package:** `superset-plugin-chart-ecds-point-map`
+**Chart key:** `ecds_point_map`
+**Location:** [ecds-point-map/](ecds-point-map/)
+
+Plot dataset rows as geographic points on a map using latitude and longitude columns, with support for bubble or pie chart styling at each location.
+
+**Capabilities:**
+- Render **bubble markers** sized by a metric value
+- Render **pie chart markers** segmented by a group-by column
+- Consistent bubble scaling across time periods
+- **Timelapse animation** — step through time periods and watch the map update
+- Drilldown by region ID (province / commune)
+- Geographic filtering with province and commune support
+- Configurable map background layer via a secondary dataset
+
+**Typical uses:** facility-level indicators, outbreak mapping, coverage rates by health post.
+
+![Point Map — bubble markers with timelapse animation](assets/point-map.png)
+
+---
+
+### 3. ECDS Region Map
+
+**Package:** `superset-plugin-chart-ecds-region-map`
+**Chart key:** `ecds_region_map`
+**Location:** [ecds-region-map/](ecds-region-map/)
+
+Choropleth map where region boundaries are loaded from a dataset in GeoJSON format. Regions are color-filled based on a metric value, with hierarchical drilldown support.
+
+**Capabilities:**
+- Color-filled (choropleth) regions using a configurable linear color scheme
+- Region boundaries loaded from a **dataset in GeoJSON format** — not limited to Vietnamese administrative divisions; any custom boundary (health zones, project areas, etc.) works as long as the dataset provides valid GeoJSON
+- **Hierarchical drilldown** — click a region to zoom into sub-regions; breadcrumb navigation back up
+- Two-datasource architecture: one dataset for metric data, one for boundary GeoJSON and administrative structure via REST API
+- **7 filtering scenarios** supporting different combinations of province and commune dashboard filters
+- Auto-drill logic that responds to filter selections automatically
+- **Timelapse animation** — step through time and watch the choropleth update
+- Guest token support for embedded dashboards
+
+**Typical uses:** national/provincial health indicator comparisons, coverage maps, district-level performance dashboards.
+
+![Region Map — choropleth of Vietnam provinces](assets/region-map.png)
+
+---
+
+## Repository structure
+
+```
+ecds-html-widget/     HTML/JS widget plugin
+ecds-point-map/       Geographic point/bubble map plugin
+ecds-region-map/      Choropleth region map plugin (with GeoJSON)
+plugin/               Starter scaffold (Hello World template)
+```
+
+## Development
+
+Each plugin is an independent npm package. From any plugin directory:
 
 ```bash
 npm install
-npm run build
-npm run dev
+npm run build   # production build
+npm run dev     # watch mode
 ```
 
-## Link the plugin into a local Superset checkout
+**Requirements:** Node.js 20.x, npm 10.x
+
+## Linking a plugin into a local Superset checkout
 
 From the `superset-frontend` directory in your Superset source tree:
 
 ```bash
-npm install --save ../../Superset
+npm install --save ../../<plugin-directory>
 ```
 
-Then open `superset-frontend/src/visualizations/presets/MainPreset.js` and add:
+Then register the plugin in `superset-frontend/src/visualizations/presets/MainPreset.js`:
 
 ```js
-import { HelloWorldChartPlugin } from 'superset-plugin-chart-hello-world';
+import { EcdsRegionMapPlugin } from 'superset-plugin-chart-ecds-region-map';
+// repeat for other plugins
 ```
-
-Register the plugin in the `plugins` array:
 
 ```js
-new HelloWorldChartPlugin().configure({ key: 'hello-world' }),
+new EcdsRegionMapPlugin().configure({ key: 'ecds_region_map' }),
 ```
-
-## Suggested next steps
-
-- replace `src/HelloWorldChart.tsx` with a real chart library such as ECharts or AntV
-- add more controls in `src/plugin/controlPanel.ts`
-- extend `src/plugin/buildQuery.ts` when you need more complex queries
-- update `src/plugin/transformProps.ts` to map query results into chart props
