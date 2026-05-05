@@ -36,6 +36,8 @@ const config: ControlPanelConfig = {
       controlSetRows: [
         ['metrics'],
         ['groupby'],
+        ['granularity_sqla'],
+        ['time_grain_sqla'],
         ['adhoc_filters'],
         ['time_range'],
         [

@@ -72,10 +72,14 @@ ${html2canvasSource}
   const isFullDoc = /<html[\s>]/i.test(resolvedHtml) || /<!doctype/i.test(resolvedHtml);
 
   if (isFullDoc) {
-    if (/<\/body>/i.test(resolvedHtml)) {
-      return resolvedHtml.replace(/<\/body>/i, `${injectedScript}\n</body>`);
+    // Inject vào <head> để data sẵn sàng trước khi user script chạy
+    if (/<\/head>/i.test(resolvedHtml)) {
+      return resolvedHtml.replace(/<\/head>/i, `${injectedScript}\n</head>`);
     }
-    return resolvedHtml + injectedScript;
+    if (/<\/body>/i.test(resolvedHtml)) {
+      return resolvedHtml.replace(/<body>/i, `<body>\n${injectedScript}`);
+    }
+    return injectedScript + resolvedHtml;
   }
 
   return `<!DOCTYPE html>
@@ -86,10 +90,10 @@ ${html2canvasSource}
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px; color: #222; background: #fff; }
   </style>
+${injectedScript}
 </head>
 <body>
 ${resolvedHtml}
-${injectedScript}
 </body>
 </html>`;
 }
