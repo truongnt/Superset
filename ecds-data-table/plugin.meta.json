@@ -1,0 +1,5 @@
+{
+  "npmName": "superset-plugin-chart-ecds-data-table",
+  "exportName": "EcdsDataTablePlugin",
+  "chartKey": "ecds_data_table"
+}

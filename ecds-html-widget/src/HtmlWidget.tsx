@@ -144,8 +144,14 @@ export default function HtmlWidget(props: EcdsHtmlWidgetProps) {
     if (!ctx) return;
     const img = new Image();
     img.onload = () => {
-      canvas.width  = img.naturalWidth  || (width as number);
-      canvas.height = img.naturalHeight || (height as number);
+      const w = img.naturalWidth  || (width as number);
+      const h = img.naturalHeight || (height as number);
+      // Đặt intrinsic size khớp với ảnh — tránh méo khi CSS != intrinsic
+      canvas.width  = w;
+      canvas.height = h;
+      // Đồng bộ CSS size để không bị scale lệch
+      canvas.style.width  = `${w}px`;
+      canvas.style.height = `${h}px`;
       ctx.drawImage(img, 0, 0);
     };
     img.src = screenshotUrl;
@@ -210,13 +216,15 @@ export default function HtmlWidget(props: EcdsHtmlWidgetProps) {
           position: 'absolute',
           top: 0,
           left: 0,
+          zIndex: 2,            // Luôn nằm trên canvas — user thao tác được
         }}
       />
 
       {/*
         canvas: chứa screenshot từ iframe, được capture bởi dom-to-pdf khi export.
-        opacity: 1 để capture đúng màu — ẩn với user bằng z-index thấp hơn iframe.
-        Khi export, iframe bị exclude (header-controls) → canvas hiện lên trong PDF.
+        zIndex thấp hơn iframe → bình thường bị che, chỉ lộ ra khi iframe bị
+        exclude (class header-controls) lúc Superset chạy html2canvas để export PDF.
+        CSS width/height được set động theo kích thước ảnh thực tế (tránh méo).
       */}
       <canvas
         ref={canvasRef}
@@ -227,13 +235,11 @@ export default function HtmlWidget(props: EcdsHtmlWidgetProps) {
           position: 'absolute',
           top: 0,
           left: 0,
-          width,
-          height,
           opacity: 1,           // opacity: 1 để pdf capture đúng màu
           pointerEvents: 'none',
           userSelect: 'none',
           display: 'block',
-          zIndex: 0,            // iframe ở trên (zIndex mặc định cao hơn)
+          zIndex: 1,            // Dưới iframe (zIndex 2), trên nền (zIndex 0)
         }}
       />
     </div>

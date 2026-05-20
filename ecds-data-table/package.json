@@ -1,0 +1,18 @@
+{
+  "name": "superset-plugin-chart-ecds-data-table",
+  "version": "0.1.0",
+  "description": "Superset plugin: bảng số liệu với filter, sort từng cột và heatmap",
+  "sideEffects": false,
+  "main": "src/index.ts",
+  "module": "src/index.ts",
+  "types": "src/index.ts",
+  "files": ["src"],
+  "scripts": {
+    "build": "echo 'Built by Superset frontend webpack'"
+  },
+  "peerDependencies": {
+    "@superset-ui/chart-controls": "*",
+    "@superset-ui/core": "*",
+    "react": "^16.13.1"
+  }
+}

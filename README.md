@@ -47,7 +47,7 @@ Plot dataset rows as geographic points on a map using latitude and longitude col
 
 **Typical uses:** facility-level indicators, outbreak mapping, coverage rates by health post.
 
-![Point Map — bubble markers with timelapse animation](assets/point-map.png)
+![Point Map — bubble markers with timelapse animation](assets/Point_map.gif)
 
 ---
 
@@ -71,7 +71,27 @@ Choropleth map where region boundaries are loaded from a dataset in GeoJSON form
 
 **Typical uses:** national/provincial health indicator comparisons, coverage maps, district-level performance dashboards.
 
-![Region Map — choropleth of Vietnam provinces](assets/region-map.png)
+![Region Map — choropleth of Vietnam provinces](assets/Choropleth_map.gif)
+
+---
+
+### 4. ECDS Data Table
+
+**Package:** `superset-plugin-chart-ecds-data-table`
+**Chart key:** `ecds_data_table`
+**Location:** [ecds-data-table/](ecds-data-table/)
+
+Bảng số liệu tương tác với filter từng cột, sort và heatmap tô màu theo giá trị.
+
+**Capabilities:**
+- **Filter** inline tại mỗi cột — nhập text lọc ngay dưới header, cột đang lọc highlight viền xanh
+- **Sort** click header — toggle tăng/giảm, indicator ▲▼, nhiều lần click đổi chiều
+- **Heatmap** 3 chế độ: theo cột (min/max riêng từng cột), theo hàng (so sánh các chỉ số trong cùng hàng), toàn bảng (1 thang màu chung); 3 bảng màu: đỏ / xanh dương / xanh lá
+- **Pagination** có thể tắt (hiển thị tất cả) hoặc chọn 20/50/100/200 dòng/trang
+- Số tự căn phải + format locale `vi-VN`, cột text căn trái
+- Footer hiển thị tổng số dòng và số dòng sau khi lọc
+
+**Typical uses:** bảng báo cáo dịch bệnh theo tỉnh/huyện, so sánh chỉ số nhiều chiều, xuất dữ liệu dạng bảng có điều kiện màu.
 
 ---
 
@@ -81,6 +101,7 @@ Choropleth map where region boundaries are loaded from a dataset in GeoJSON form
 ecds-html-widget/     HTML/JS widget plugin
 ecds-point-map/       Geographic point/bubble map plugin
 ecds-region-map/      Choropleth region map plugin (with GeoJSON)
+ecds-data-table/      Data table plugin với filter, sort và heatmap
 plugin/               Starter scaffold (Hello World template)
 ```
 

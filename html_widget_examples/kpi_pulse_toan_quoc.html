@@ -1,0 +1,109 @@
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { margin: 0; padding: 0; overflow: hidden; }
+.row {
+  display: flex;
+  gap: 8px;
+  font-family: sans-serif;
+  padding: 4px;
+}
+.card {
+  flex: 1;
+  background: #fff;
+  border: 0.5px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 14px 16px;
+  text-align: center;
+}
+.label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #666;
+}
+.total {
+  margin: 0 0 4px;
+  font-size: 32px;
+  font-weight: 500;
+  color: #111;
+}
+.compare {
+  margin: 0;
+  font-size: 11px;
+  color: #888;
+}
+</style>
+
+<div class="row">
+  <div class="card">
+    <p class="label">Tổng ca bệnh</p>
+    <p class="total" id="tong-ca">{{tong_so_ca}}</p>
+    <span id="tong-ca-prev" style="display:none">{{tong_so_ca_tuan_truoc}}</span>
+    <p class="compare" id="cmp-tong-ca">...</p>
+  </div>
+  <div class="card">
+    <p class="label">% Báo cáo đúng hạn</p>
+    <p class="total" id="pct-dung-han">{{pct_dung_han}}</p>
+    <span id="pct-dung-han-prev" style="display:none">{{pct_dung_han_tuan_truoc}}</span>
+    <p class="compare" id="cmp-pct-dung-han">...</p>
+  </div>
+  <div class="card">
+    <p class="label">Tỉnh chưa báo cáo</p>
+    <p class="total" id="tinh-chua-bc">{{tinh_chua_bao_cao}}</p>
+    <span id="tinh-chua-bc-prev" style="display:none">{{tinh_chua_bao_cao_tuan_truoc}}</span>
+    <p class="compare" id="cmp-tinh-chua-bc">...</p>
+  </div>
+  <div class="card">
+    <p class="label">Tử vong</p>
+    <p class="total" id="tu-vong">{{ca_tu_vong}}</p>
+    <span id="tu-vong-prev" style="display:none">{{ca_tu_vong_tuan_truoc}}</span>
+    <p class="compare" id="cmp-tu-vong">...</p>
+  </div>
+  <div class="card">
+    <p class="label">Số bệnh có ca</p>
+    <p class="total" id="so-benh">{{so_benh_co_ca}}</p>
+    <span id="so-benh-prev" style="display:none">{{so_benh_co_ca_tuan_truoc}}</span>
+    <p class="compare" id="cmp-so-benh">...</p>
+  </div>
+</div>
+
+<script>
+function val(id) {
+  var el = document.getElementById(id);
+  if (!el) return 0;
+  var v = el.textContent.trim();
+  if (v === '' || v === 'None' || v === 'null') return 0;
+  var n = parseFloat(v);
+  return isNaN(n) ? 0 : n;
+}
+
+// higherIsBad=true  → tăng màu đỏ, giảm màu xanh (ca bệnh, tử vong, tỉnh thiếu)
+// higherIsBad=false → tăng màu xanh, giảm màu đỏ (% đúng hạn)
+function renderCmp(elId, curr, prev, higherIsBad) {
+  var el = document.getElementById(elId);
+  if (!el) return;
+  if (prev === 0 && curr === 0) {
+    el.innerHTML = '<span style="color:#888">0 (0%) tuần trước nữa</span>';
+    return;
+  }
+  if (prev === 0) {
+    var newColor = higherIsBad ? '#E24B4A' : '#1D9E75';
+    el.innerHTML = '<span style="color:' + newColor + '">▲ +' + curr + ' (mới) tuần trước nữa</span>';
+    return;
+  }
+  var diff = parseFloat((curr - prev).toFixed(2));
+  var pct  = (diff / prev * 100).toFixed(2);
+  var isUp = diff > 0;
+  var isGood = higherIsBad ? !isUp : isUp;
+  var color  = diff === 0 ? '#888' : isGood ? '#1D9E75' : '#E24B4A';
+  var arrow  = isUp ? '▲' : (diff < 0 ? '▼' : '—');
+  var sign   = isUp ? '+' : '';
+  el.innerHTML = '<span style="color:' + color + '">' +
+    arrow + ' ' + sign + diff + ' (' + sign + pct + '%) tuần trước nữa</span>';
+}
+
+renderCmp('cmp-tong-ca',      val('tong-ca'),       val('tong-ca-prev'),       true);
+renderCmp('cmp-pct-dung-han', val('pct-dung-han'),  val('pct-dung-han-prev'),  false);
+renderCmp('cmp-tinh-chua-bc', val('tinh-chua-bc'),  val('tinh-chua-bc-prev'),  true);
+renderCmp('cmp-tu-vong',      val('tu-vong'),        val('tu-vong-prev'),       true);
+renderCmp('cmp-so-benh',      val('so-benh'),        val('so-benh-prev'),       false);
+</script>

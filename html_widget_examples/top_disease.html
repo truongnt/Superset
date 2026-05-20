@@ -1,0 +1,207 @@
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #222; background: #fff; padding: 10px; }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .toolbar-group { display: flex; align-items: center; gap: 5px; }
+  .label { font-size: 11px; color: #888; white-space: nowrap; }
+
+  .btn {
+    padding: 4px 12px; border-radius: 20px; border: 1.5px solid #bbb;
+    background: #f5f5f5; cursor: pointer; font-size: 12px; color: #555;
+  }
+  .btn.active { background: #1a73e8; border-color: #1a73e8; color: #fff; font-weight: 600; }
+
+  select {
+    padding: 4px 8px; border-radius: 6px; border: 1.5px solid #bbb;
+    font-size: 12px; color: #333; background: #fff; cursor: pointer;
+  }
+  option.current-week { font-weight: 700; }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead tr { background: #f0f4ff; }
+  th { padding: 7px 10px; text-align: left; font-size: 12px; color: #555; border-bottom: 2px solid #dde3f0; white-space: nowrap; }
+  th.num { text-align: right; }
+  td { padding: 6px 10px; border-bottom: 1px solid #eee; vertical-align: middle; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:hover td { background: #f7f9ff; }
+  .rank { color: #999; font-size: 11px; }
+  .disease { font-weight: 500; }
+  .change-cell { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+  .up   { color: #e53935; }
+  .down { color: #43a047; }
+  .flat { color: #999; }
+  .pct  { min-width: 52px; text-align: right; font-variant-numeric: tabular-nums; }
+  .arrow { font-size: 14px; line-height: 1; }
+</style>
+
+<div class="toolbar">
+  <div class="toolbar-group">
+    <span class="label">Sắp xếp:</span>
+    <button class="btn" id="btn-cases" onclick="setSort('cases')">Số ca</button>
+    <button class="btn active" id="btn-up"    onclick="setSort('up')">% Tăng</button>
+    <button class="btn" id="btn-down" onclick="setSort('down')">% Giảm</button>
+  </div>
+  <div class="toolbar-group">
+    <span class="label">Hiển thị:</span>
+    <select id="cnt-sel" onchange="setCnt(Number(this.value))">
+      <option value="10" selected>Top 10</option>
+      <option value="20">Top 20</option>
+      <option value="50">Top 50</option>
+      <option value="0">Tất cả</option>
+    </select>
+  </div>
+  <div class="toolbar-group">
+    <span class="label">Tuần:</span>
+    <select id="week-sel" onchange="doRender()"></select>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th class="num">#</th>
+      <th>Tên bệnh</th>
+      <th class="num" id="col-prev">Tuần trước</th>
+      <th class="num" id="col-now">Tuần này</th>
+      <th class="num">Thay đổi</th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+
+<script>
+(function () {
+  function isoWeekInfo(ts) {
+    var d = new Date(ts);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+    var year = d.getFullYear();
+    var w1   = new Date(year, 0, 4);
+    var week = 1 + Math.round(((d - w1) / 86400000 - 3 + (w1.getDay() + 6) % 7) / 7);
+    return { year: year, week: week, key: year * 100 + week };
+  }
+
+  var _now = Date.now();
+  var rawRows = (window.DATA || []).filter(function (r) {
+    return r['ngay_su_kien'] != null && r['ngay_su_kien'] <= _now;
+  });
+
+  var weekMap = {};
+  var map     = {};
+
+  rawRows.forEach(function (row) {
+    var name  = String(row['ten_benh'] || '').trim();
+    var ts    = row['ngay_su_kien'];
+    var count = Number(row['tong_so_ca'] || 0);
+    if (!name || ts == null) return;
+    var info = isoWeekInfo(ts);
+    var k    = info.key;
+    if (!weekMap[k]) weekMap[k] = info;
+    if (!map[name])  map[name]  = {};
+    map[name][k] = (map[name][k] || 0) + count;
+  });
+
+  var allKeys = Object.keys(weekMap).map(Number).sort(function (a, b) { return b - a; });
+
+  // Điền dropdown tuần — tuần mới nhất được đánh dấu
+  var sel = document.getElementById('week-sel');
+  allKeys.forEach(function (k, i) {
+    var info = weekMap[k];
+    var opt  = document.createElement('option');
+    opt.value = k;
+    opt.textContent = 'Tuần ' + info.week + '/' + info.year + (i === 0 ? ' ★' : '');
+    if (i === 0) {
+      opt.selected = true;
+      opt.className = 'current-week';
+    }
+    sel.appendChild(opt);
+  });
+
+  var _sort = 'up';
+  var _cnt  = 10;
+
+  window.setSort = function (mode) {
+    _sort = mode;
+    ['cases', 'up', 'down'].forEach(function (id) {
+      document.getElementById('btn-' + id).classList.toggle('active', id === mode);
+    });
+    doRender();
+  };
+
+  window.setCnt = function (n) {
+    _cnt = n;
+    doRender();
+  };
+
+  window.doRender = function () {
+    var keyNow  = Number(sel.value);
+    var idx     = allKeys.indexOf(keyNow);
+    var keyPrev = idx + 1 < allKeys.length ? allKeys[idx + 1] : null;
+
+    var infoNow  = weekMap[keyNow]  || {};
+    var infoPrev = keyPrev ? weekMap[keyPrev] : null;
+
+    document.getElementById('col-now').textContent  = 'Tuần ' + infoNow.week + '/' + infoNow.year;
+    document.getElementById('col-prev').textContent = infoPrev
+      ? 'Tuần ' + infoPrev.week + '/' + infoPrev.year
+      : 'Tuần trước';
+
+    var tableData = Object.keys(map).map(function (name) {
+      var a   = map[name][keyNow]  || 0;
+      var b   = keyPrev !== null ? (map[name][keyPrev] || 0) : null;
+      var pct = (b === null || b === 0) ? null : Math.round((a - b) / b * 100);
+      return { name: name, now: a, prev: b, pct: pct };
+    });
+
+    if (_sort === 'cases') {
+      tableData.sort(function (a, b) { return b.now - a.now; });
+    } else if (_sort === 'up') {
+      tableData.sort(function (a, b) {
+        var pa = (a.pct !== null && a.pct > 0) ? a.pct : -Infinity;
+        var pb = (b.pct !== null && b.pct > 0) ? b.pct : -Infinity;
+        return pb - pa;
+      });
+    } else {
+      tableData.sort(function (a, b) {
+        var pa = (a.pct !== null && a.pct < 0) ? a.pct : Infinity;
+        var pb = (b.pct !== null && b.pct < 0) ? b.pct : Infinity;
+        return pa - pb;
+      });
+    }
+
+    var rows  = _cnt === 0 ? tableData : tableData.slice(0, _cnt);
+    var tbody = document.getElementById('tbody');
+    tbody.innerHTML = '';
+
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;padding:16px">Không có dữ liệu</td></tr>';
+      return;
+    }
+
+    rows.forEach(function (row, i) {
+      var arrow, cls, pctStr;
+      if (row.pct === null)  { arrow = '—'; cls = 'flat'; pctStr = '—'; }
+      else if (row.pct > 0)  { arrow = '▲'; cls = 'up';   pctStr = '+' + row.pct + '%'; }
+      else if (row.pct < 0)  { arrow = '▼'; cls = 'down'; pctStr = row.pct + '%'; }
+      else                   { arrow = '—'; cls = 'flat'; pctStr = '0%'; }
+
+      var prevTxt = row.prev === null ? '—' : row.prev.toLocaleString('vi-VN');
+
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td class="num rank">' + (i + 1) + '</td>' +
+        '<td class="disease">'  + row.name + '</td>' +
+        '<td class="num">'      + prevTxt + '</td>' +
+        '<td class="num">'      + row.now.toLocaleString('vi-VN') + '</td>' +
+        '<td class="num"><div class="change-cell">' +
+          '<span class="pct ' + cls + '">' + pctStr + '</span>' +
+          '<span class="arrow ' + cls + '">' + arrow + '</span>' +
+        '</div></td>';
+      tbody.appendChild(tr);
+    });
+  };
+
+  doRender();
+})();
+</script>

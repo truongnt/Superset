@@ -1,0 +1,157 @@
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { margin: 0; padding: 0; overflow: hidden; }
+.header {
+  font-family: sans-serif;
+  font-size: 11px;
+  color: #888;
+  padding: 4px 4px 2px;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  font-family: sans-serif;
+  padding: 4px;
+}
+.card {
+  flex: 1;
+  background: #fff;
+  border: 0.5px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 14px 16px;
+  text-align: center;
+}
+.label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #666;
+}
+.total {
+  margin: 0 0 4px;
+  font-size: 32px;
+  font-weight: 500;
+  color: #111;
+}
+.compare {
+  margin: 0;
+  font-size: 11px;
+  color: #888;
+}
+</style>
+
+<p class="header" id="period-label">Đang tính...</p>
+
+<div class="row">
+  <div class="card">
+    <p class="label">Tổng ca bệnh</p>
+    <p class="total" id="tong-ca">—</p>
+    <p class="compare" id="cmp-tong-ca">...</p>
+  </div>
+  <div class="card">
+    <p class="label">Tử vong</p>
+    <p class="total" id="tu-vong">—</p>
+    <p class="compare" id="cmp-tu-vong">...</p>
+  </div>
+  <div class="card">
+    <p class="label">Ca nặng</p>
+    <p class="total" id="ca-nang">—</p>
+    <p class="compare" id="cmp-ca-nang">...</p>
+  </div>
+  <div class="card">
+    <p class="label">Đang điều trị</p>
+    <p class="total" id="dang-dt">—</p>
+    <p class="compare" id="cmp-dang-dt">...</p>
+  </div>
+</div>
+
+<script>
+(function () {
+  function isoWeekInfo(ts) {
+    var d = new Date(ts);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+    var year = d.getFullYear();
+    var w1   = new Date(year, 0, 4);
+    var week = 1 + Math.round(((d - w1) / 86400000 - 3 + (w1.getDay() + 6) % 7) / 7);
+    return { year: year, week: week, key: year * 100 + week };
+  }
+
+  var _now    = Date.now();
+  var rawRows = (window.DATA || []).filter(function (r) {
+    return r['ngay_su_kien'] != null && r['ngay_su_kien'] <= _now;
+  });
+
+  // Build map: weekKey → { tong_so_ca, so_ca_tu_vong, so_ca_nang, dang_dieu_tri }
+  var FIELDS  = ['tong_so_ca', 'so_ca_tu_vong', 'so_ca_nang', 'dang_dieu_tri'];
+  var weekMap = {};   // key → { week, year, tong_so_ca, ... }
+
+  rawRows.forEach(function (r) {
+    var info = isoWeekInfo(r['ngay_su_kien']);
+    var k    = info.key;
+    if (!weekMap[k]) {
+      weekMap[k] = { week: info.week, year: info.year };
+      FIELDS.forEach(function (f) { weekMap[k][f] = 0; });
+    }
+    FIELDS.forEach(function (f) {
+      weekMap[k][f] += Number(r[f]) || 0;
+    });
+  });
+
+  // Tuần hiện tại → hiển thị N-1, so sánh N-2
+  var infoShow = isoWeekInfo(_now - 7  * 86400000);
+  var infoPrev = isoWeekInfo(_now - 14 * 86400000);
+  var keyShow  = infoShow.key;
+  var keyPrev  = infoPrev.key;
+
+  var dataShow = weekMap[keyShow] || null;
+  var dataPrev = weekMap[keyPrev] || null;
+
+  document.getElementById('period-label').textContent =
+    'Tuần ' + infoShow.week + '/' + infoShow.year +
+    ' — so sánh với Tuần ' + infoPrev.week + '/' + infoPrev.year;
+
+  function renderCmp(elId, curr, prev, weekLabel) {
+    var el = document.getElementById(elId);
+    if (!el) return;
+    if (prev === null) {
+      el.innerHTML = '<span style="color:#888">Không có dữ liệu ' + weekLabel + '</span>';
+      return;
+    }
+    if (prev === 0 && curr === 0) {
+      el.innerHTML = '<span style="color:#888">0 (0%) ' + weekLabel + '</span>';
+      return;
+    }
+    if (prev === 0) {
+      el.innerHTML = '<span style="color:#E24B4A">▲ +' + curr + ' (mới) ' + weekLabel + '</span>';
+      return;
+    }
+    var diff  = parseFloat((curr - prev).toFixed(2));
+    var pct   = (diff / prev * 100).toFixed(2);
+    var isUp  = diff > 0;
+    var color = diff === 0 ? '#888' : isUp ? '#E24B4A' : '#1D9E75';
+    var arrow = isUp ? '▲' : (diff < 0 ? '▼' : '—');
+    var sign  = isUp ? '+' : '';
+    el.innerHTML = '<span style="color:' + color + '">' +
+      arrow + ' ' + sign + diff + ' (' + sign + pct + '%) ' + weekLabel + '</span>';
+  }
+
+  var prevLabel = 'so Tuần ' + infoPrev.week;
+
+  var cards = [
+    { id: 'tong-ca', field: 'tong_so_ca'    },
+    { id: 'tu-vong', field: 'so_ca_tu_vong' },
+    { id: 'ca-nang', field: 'so_ca_nang'    },
+    { id: 'dang-dt', field: 'dang_dieu_tri' },
+  ];
+
+  cards.forEach(function (cfg) {
+    var curr = dataShow ? (dataShow[cfg.field] || 0) : 0;
+    var prev = dataPrev ? (dataPrev[cfg.field] || 0) : null;
+
+    var el = document.getElementById(cfg.id);
+    if (el) el.textContent = curr.toLocaleString('vi-VN');
+
+    renderCmp('cmp-' + cfg.id, curr, prev, prevLabel);
+  });
+})();
+</script>
