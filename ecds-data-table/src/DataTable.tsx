@@ -39,10 +39,13 @@ export default function EcdsDataTable({
   const heatRanges = useMemo(() => {
     if (!enableHeatmap) return { colRange: {}, globalRange: null };
 
-    // Collect numeric values per column
+    // Collect numeric values per column — exclude null/undefined/'' before converting
     const colVals: Record<string, number[]> = {};
     columns.forEach(col => {
-      const vals = data.map(r => Number(r[col])).filter(v => !isNaN(v));
+      const vals = data
+        .filter(r => r[col] !== null && r[col] !== undefined && r[col] !== '')
+        .map(r => Number(r[col]))
+        .filter(v => !isNaN(v));
       if (vals.length > 0) colVals[col] = vals;
     });
 
@@ -99,7 +102,10 @@ export default function EcdsDataTable({
   }
 
   function getRowRange(row: Record<string, any>): { min: number; max: number } | null {
-    const vals = columns.map(c => Number(row[c])).filter(v => !isNaN(v));
+    const vals = columns
+      .filter(c => row[c] !== null && row[c] !== undefined && row[c] !== '')
+      .map(c => Number(row[c]))
+      .filter(v => !isNaN(v));
     if (vals.length === 0) return null;
     const min = Math.min(...vals), max = Math.max(...vals);
     return min !== max ? { min, max } : null;
@@ -271,7 +277,7 @@ export default function EcdsDataTable({
                             borderBottom: '1px solid #eee',
                             textAlign: isNum ? 'right' : 'left',
                             fontVariantNumeric: 'tabular-nums',
-                            background: bg ?? 'inherit',
+                            background: bg,        // undefined = React không set attribute → CSS cascade tự nhiên
                             whiteSpace: 'nowrap',
                           }}
                         >
