@@ -156,17 +156,24 @@ const config: ControlPanelConfig = {
         ],
         [
           {
-            name: 'heatmap_color',
+            name: 'heatmap_color_low',
             config: {
-              type: 'SelectControl',
-              label: 'Màu heatmap',
-              default: 'red',
-              choices: [
-                ['red',   'Đỏ (trắng → đỏ)'],
-                ['blue',  'Xanh dương (trắng → xanh)'],
-                ['green', 'Xanh lá (trắng → xanh lá)'],
-              ],
+              type: 'ColorPickerControl',
+              label: 'Màu giá trị thấp',
+              default: { r: 255, g: 255, b: 255, a: 1 },
               renderTrigger: true,
+              description: 'Màu tô cho ô có giá trị nhỏ nhất.',
+              visibility: ({ controls }: any) => Boolean(controls?.enable_heatmap?.value),
+            },
+          },
+          {
+            name: 'heatmap_color_high',
+            config: {
+              type: 'ColorPickerControl',
+              label: 'Màu giá trị cao',
+              default: { r: 220, g: 38, b: 38, a: 1 },
+              renderTrigger: true,
+              description: 'Màu tô cho ô có giá trị lớn nhất.',
               visibility: ({ controls }: any) => Boolean(controls?.enable_heatmap?.value),
             },
           },

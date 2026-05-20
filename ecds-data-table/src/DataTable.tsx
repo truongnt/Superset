@@ -1,5 +1,5 @@
 import React, { useState, useMemo, CSSProperties } from 'react';
-import { EcdsDataTableProps, HeatmapColor, HeatmapScope, QueryMode } from './types';
+import { EcdsDataTableProps, RgbColor, HeatmapScope, QueryMode } from './types';
 
 const BTN: CSSProperties = {
   padding: '2px 8px',
@@ -11,11 +11,9 @@ const BTN: CSSProperties = {
   lineHeight: 1.5,
 };
 
-function heatBg(ratio: number, scheme: HeatmapColor): string {
+function heatBg(ratio: number, low: RgbColor, high: RgbColor): string {
   const lerp = (a: number, b: number) => Math.round(a + (b - a) * ratio);
-  if (scheme === 'blue')  return `rgb(${lerp(255, 59)},${lerp(255, 130)},${lerp(255, 246)})`;
-  if (scheme === 'green') return `rgb(${lerp(255, 34)},${lerp(255, 197)},${lerp(255, 94)})`;
-  return `rgb(255,${lerp(255, 80)},${lerp(255, 80)})`;
+  return `rgba(${lerp(low.r, high.r)},${lerp(low.g, high.g)},${lerp(low.b, high.b)},1)`;
 }
 
 export default function EcdsDataTable({
@@ -26,7 +24,8 @@ export default function EcdsDataTable({
   columnLabels,
   queryMode,
   enableHeatmap,
-  heatmapColor,
+  heatmapColorLow,
+  heatmapColorHigh,
   heatmapScope,
   pageSize,
 }: EcdsDataTableProps) {
@@ -132,7 +131,7 @@ export default function EcdsDataTable({
 
     if (!range) return undefined;
     const ratio = (n - range.min) / (range.max - range.min);
-    return heatBg(ratio, heatmapColor);
+    return heatBg(ratio, heatmapColorLow, heatmapColorHigh);
   }
 
   const hasFilter = Object.values(filters).some(Boolean);

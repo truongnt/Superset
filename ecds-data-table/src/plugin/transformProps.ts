@@ -1,5 +1,8 @@
 import { ChartProps, DataRecord, getMetricLabel } from '@superset-ui/core';
-import { EcdsDataTableProps, QueryMode } from '../types';
+import { EcdsDataTableProps, QueryMode, RgbColor } from '../types';
+
+const DEFAULT_LOW:  RgbColor = { r: 255, g: 255, b: 255, a: 1 };
+const DEFAULT_HIGH: RgbColor = { r: 220, g: 38,  b: 38,  a: 1 };
 
 function metricKey(m: any): string {
   if (!m) return '';
@@ -52,7 +55,8 @@ export default function transformProps(chartProps: ChartProps): EcdsDataTablePro
     columnLabels,
     queryMode,
     enableHeatmap: fd.enable_heatmap ?? false,
-    heatmapColor: fd.heatmap_color ?? 'red',
+    heatmapColorLow:  fd.heatmap_color_low  ?? DEFAULT_LOW,
+    heatmapColorHigh: fd.heatmap_color_high ?? DEFAULT_HIGH,
     heatmapScope: fd.heatmap_scope ?? 'column',
     pageSize: fd.page_size ?? 50,
   };

@@ -1,4 +1,4 @@
-export type HeatmapColor = 'red' | 'blue' | 'green';
+export interface RgbColor { r: number; g: number; b: number; a?: number; }
 export type HeatmapScope = 'column' | 'row' | 'cell';
 export type QueryMode = 'aggregate' | 'raw_records';
 
@@ -10,7 +10,8 @@ export interface EcdsDataTableProps {
   columnLabels: Record<string, string>;
   queryMode: QueryMode;
   enableHeatmap: boolean;
-  heatmapColor: HeatmapColor;
+  heatmapColorLow: RgbColor;
+  heatmapColorHigh: RgbColor;
   heatmapScope: HeatmapScope;
   pageSize: number;
 }
