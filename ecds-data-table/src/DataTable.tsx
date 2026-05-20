@@ -1,5 +1,5 @@
 import React, { useState, useMemo, CSSProperties } from 'react';
-import { EcdsDataTableProps, HeatmapColor, HeatmapScope } from './types';
+import { EcdsDataTableProps, HeatmapColor, HeatmapScope, QueryMode } from './types';
 
 const BTN: CSSProperties = {
   padding: '2px 8px',
@@ -24,6 +24,7 @@ export default function EcdsDataTable({
   data,
   columns,
   columnLabels,
+  queryMode,
   enableHeatmap,
   heatmapColor,
   heatmapScope,
@@ -299,7 +300,21 @@ export default function EcdsDataTable({
           flexShrink: 0,
         }}
       >
-        <span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span
+            style={{
+              padding: '1px 6px',
+              borderRadius: 4,
+              fontSize: 10,
+              fontWeight: 700,
+              background: queryMode === 'raw_records' ? '#fef9c3' : '#dbeafe',
+              color:      queryMode === 'raw_records' ? '#854d0e' : '#1d4ed8',
+              textTransform: 'uppercase',
+              letterSpacing: '.3px',
+            }}
+          >
+            {queryMode === 'raw_records' ? 'Raw' : 'Aggregate'}
+          </span>
           {sorted.length.toLocaleString('vi-VN')} dòng
           {hasFilter ? ` (lọc từ ${data.length.toLocaleString('vi-VN')})` : ''}
         </span>

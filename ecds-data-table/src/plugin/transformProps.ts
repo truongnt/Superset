@@ -1,5 +1,5 @@
 import { ChartProps, DataRecord, getMetricLabel } from '@superset-ui/core';
-import { EcdsDataTableProps } from '../types';
+import { EcdsDataTableProps, QueryMode } from '../types';
 
 function metricKey(m: any): string {
   if (!m) return '';
@@ -13,29 +13,36 @@ export default function transformProps(chartProps: ChartProps): EcdsDataTablePro
   const { width, height, formData, queriesData } = chartProps;
   const fd = formData as any;
 
+  const queryMode: QueryMode = fd.query_mode ?? 'aggregate';
   const rows = (queriesData[0]?.data ?? []) as DataRecord[];
+  const firstRowKeys = Object.keys(rows[0] ?? {});
 
-  // Build column order: groupby dimensions first, then metrics
-  const groupbyCols: string[] = (fd.groupby ?? []).map((c: any) =>
-    typeof c === 'string' ? c : (c.column_name ?? String(c)),
-  );
-  const metricCols: string[] = (fd.metrics ?? []).map(metricKey).filter(Boolean);
-
-  // Fall back to keys from first row if both empty
-  const columns =
-    groupbyCols.length + metricCols.length > 0
-      ? [...groupbyCols, ...metricCols]
-      : Object.keys(rows[0] ?? {});
-
-  // Human-readable labels: metrics get their label, dimensions keep name
+  let columns: string[];
   const columnLabels: Record<string, string> = {};
-  columns.forEach(col => {
-    columnLabels[col] = col;
-  });
-  (fd.metrics ?? []).forEach((m: any) => {
-    const key = metricKey(m);
-    if (key) columnLabels[key] = getMetricLabel(m);
-  });
+
+  if (queryMode === 'raw_records') {
+    // Raw: use explicitly selected columns, fall back to all keys in first row
+    const selected: string[] = fd.all_columns ?? [];
+    columns = selected.length > 0 ? selected : firstRowKeys;
+    columns.forEach(col => { columnLabels[col] = col; });
+  } else {
+    // Aggregate: groupby dimensions first, then metrics
+    const groupbyCols: string[] = (fd.groupby ?? []).map((c: any) =>
+      typeof c === 'string' ? c : (c.column_name ?? String(c)),
+    );
+    const metricCols: string[] = (fd.metrics ?? []).map(metricKey).filter(Boolean);
+
+    columns =
+      groupbyCols.length + metricCols.length > 0
+        ? [...groupbyCols, ...metricCols]
+        : firstRowKeys;
+
+    columns.forEach(col => { columnLabels[col] = col; });
+    (fd.metrics ?? []).forEach((m: any) => {
+      const key = metricKey(m);
+      if (key) columnLabels[key] = getMetricLabel(m);
+    });
+  }
 
   return {
     width,
@@ -43,6 +50,7 @@ export default function transformProps(chartProps: ChartProps): EcdsDataTablePro
     data: rows as Array<Record<string, any>>,
     columns,
     columnLabels,
+    queryMode,
     enableHeatmap: fd.enable_heatmap ?? false,
     heatmapColor: fd.heatmap_color ?? 'red',
     heatmapScope: fd.heatmap_scope ?? 'column',

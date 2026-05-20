@@ -1,5 +1,11 @@
 import { ControlPanelConfig, sections } from '@superset-ui/chart-controls';
 
+const isAggregate = ({ controls }: any) =>
+  (controls?.query_mode?.value ?? 'aggregate') === 'aggregate';
+
+const isRaw = ({ controls }: any) =>
+  controls?.query_mode?.value === 'raw_records';
+
 const config: ControlPanelConfig = {
   controlPanelSections: [
     sections.legacyTimeseriesTime,
@@ -7,8 +13,83 @@ const config: ControlPanelConfig = {
       label: 'Query',
       expanded: true,
       controlSetRows: [
-        ['metrics'],
-        ['groupby'],
+        [
+          {
+            name: 'query_mode',
+            config: {
+              type: 'SelectControl',
+              label: 'Chế độ query',
+              default: 'aggregate',
+              choices: [
+                ['aggregate',   'Aggregate — groupby + metrics'],
+                ['raw_records', 'Raw records — toàn bộ dòng'],
+              ],
+              renderTrigger: false,
+              description:
+                'Aggregate: tổng hợp theo nhóm. Raw records: lấy thẳng từng dòng không gom nhóm.',
+            },
+          },
+        ],
+        // ── Aggregate mode ──────────────────────────────────────
+        [
+          {
+            name: 'metrics',
+            config: { visibility: isAggregate },
+          },
+        ],
+        [
+          {
+            name: 'groupby',
+            config: { visibility: isAggregate },
+          },
+        ],
+        // ── Raw records mode ────────────────────────────────────
+        [
+          {
+            name: 'all_columns',
+            config: {
+              type: 'SelectControl',
+              label: 'Cột hiển thị',
+              multi: true,
+              default: [],
+              mapStateToProps: (state: any) => {
+                const cols: string[] =
+                  state.datasource?.columns?.map((c: any) => c.column_name) ?? [];
+                return {
+                  choices: cols.map(c => [c, c]),
+                };
+              },
+              renderTrigger: false,
+              visibility: isRaw,
+              description: 'Chọn các cột muốn hiển thị. Để trống = lấy tất cả cột.',
+            },
+          },
+        ],
+        [
+          {
+            name: 'order_by_cols',
+            config: {
+              type: 'SelectControl',
+              label: 'Sắp xếp mặc định',
+              multi: true,
+              default: [],
+              mapStateToProps: (state: any) => {
+                const cols: string[] =
+                  state.datasource?.columns?.map((c: any) => c.column_name) ?? [];
+                return {
+                  choices: [
+                    ...cols.map(c => [`${c} ASC`, `${c} ↑`]),
+                    ...cols.map(c => [`${c} DESC`, `${c} ↓`]),
+                  ],
+                };
+              },
+              renderTrigger: false,
+              visibility: isRaw,
+              description: 'Thứ tự sắp xếp mặc định khi load (user vẫn có thể sort lại trên UI).',
+            },
+          },
+        ],
+        // ── Shared ──────────────────────────────────────────────
         ['adhoc_filters'],
         ['row_limit'],
       ],
@@ -50,8 +131,7 @@ const config: ControlPanelConfig = {
               label: 'Bật heatmap',
               default: false,
               renderTrigger: true,
-              description:
-                'Tô màu ô dựa theo giá trị — mỗi cột số tự tính min/max riêng.',
+              description: 'Tô màu ô dựa theo giá trị — mỗi cột số tự tính min/max riêng.',
             },
           },
         ],
@@ -70,8 +150,7 @@ const config: ControlPanelConfig = {
               renderTrigger: true,
               description:
                 'Cột: so sánh trong cùng cột. Hàng: so sánh trong cùng hàng. Toàn bảng: so sánh tất cả ô số.',
-              visibility: ({ controls }: any) =>
-                Boolean(controls?.enable_heatmap?.value),
+              visibility: ({ controls }: any) => Boolean(controls?.enable_heatmap?.value),
             },
           },
         ],
@@ -88,8 +167,7 @@ const config: ControlPanelConfig = {
                 ['green', 'Xanh lá (trắng → xanh lá)'],
               ],
               renderTrigger: true,
-              visibility: ({ controls }: any) =>
-                Boolean(controls?.enable_heatmap?.value),
+              visibility: ({ controls }: any) => Boolean(controls?.enable_heatmap?.value),
             },
           },
         ],
