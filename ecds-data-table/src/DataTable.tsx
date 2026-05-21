@@ -1,5 +1,6 @@
 import React, { useState, useMemo, CSSProperties } from 'react';
 import { EcdsDataTableProps, RgbColor, HeatmapScope } from './types';
+import { toRgba } from './plugin/transformProps';
 
 const BTN: CSSProperties = {
   padding: '2px 8px',
@@ -28,17 +29,24 @@ export default function EcdsDataTable({
   heatmapColorHigh,
   heatmapScope,
   pageSize,
+  tableStyle,
 }: EcdsDataTableProps) {
   const [sortCol, setSortCol] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [page, setPage] = useState(0);
 
+  const headerBg    = toRgba(tableStyle.headerBg);
+  const headerText  = toRgba(tableStyle.headerText);
+  const rowOddBg    = toRgba(tableStyle.rowOddBg);
+  const rowEvenBg   = toRgba(tableStyle.rowEvenBg);
+  const border      = `1px solid ${toRgba(tableStyle.borderColor)}`;
+  const borderHeavy = `2px solid ${toRgba(tableStyle.borderColor)}`;
+
   // Pre-compute heatmap ranges based on scope
   const heatRanges = useMemo(() => {
     if (!enableHeatmap) return { colRange: {}, globalRange: null };
 
-    // Collect numeric values per column — exclude null/undefined/'' before converting
     const colVals: Record<string, number[]> = {};
     columns.forEach(col => {
       const vals = data
@@ -48,14 +56,12 @@ export default function EcdsDataTable({
       if (vals.length > 0) colVals[col] = vals;
     });
 
-    // Per-column range (used for scope='column')
     const colRange: Record<string, { min: number; max: number }> = {};
     Object.entries(colVals).forEach(([col, vals]) => {
       const min = Math.min(...vals), max = Math.max(...vals);
       if (min !== max) colRange[col] = { min, max };
     });
 
-    // Global range (used for scope='cell')
     const allVals = Object.values(colVals).flat();
     const globalMin = Math.min(...allVals), globalMax = Math.max(...allVals);
     const globalRange = allVals.length > 0 && globalMin !== globalMax
@@ -156,13 +162,13 @@ export default function EcdsDataTable({
         >
           <thead>
             {/* Column headers */}
-            <tr style={{ background: '#f0f4ff', position: 'sticky', top: 0, zIndex: 2 }}>
+            <tr style={{ background: headerBg, position: 'sticky', top: 0, zIndex: 2 }}>
               <th
                 style={{
                   padding: '7px 10px',
                   textAlign: 'center',
-                  borderBottom: '2px solid #dde3f0',
-                  color: '#999',
+                  borderBottom: borderHeavy,
+                  color: headerText,
                   fontWeight: 400,
                   fontSize: 11,
                   width: 36,
@@ -179,11 +185,11 @@ export default function EcdsDataTable({
                     style={{
                       padding: '7px 10px',
                       textAlign: 'left',
-                      borderBottom: '2px solid #dde3f0',
+                      borderBottom: borderHeavy,
                       cursor: 'pointer',
                       userSelect: 'none',
                       whiteSpace: 'nowrap',
-                      color: active ? '#1a73e8' : '#555',
+                      color: active ? '#1a73e8' : headerText,
                       fontWeight: active ? 700 : 600,
                       fontSize: 12,
                     }}
@@ -202,9 +208,9 @@ export default function EcdsDataTable({
 
             {/* Filter row */}
             <tr style={{ position: 'sticky', top: 33, zIndex: 2, background: '#fafafa' }}>
-              <td style={{ borderBottom: '1px solid #eee' }} />
+              <td style={{ borderBottom: border }} />
               {columns.map(col => (
-                <td key={col} style={{ padding: '3px 6px', borderBottom: '1px solid #eee' }}>
+                <td key={col} style={{ padding: '3px 6px', borderBottom: border }}>
                   <input
                     value={filters[col] || ''}
                     onChange={e => {
@@ -241,22 +247,22 @@ export default function EcdsDataTable({
             ) : (
               paginated.map((row, i) => {
                 const globalIdx = page * pageSize + i + 1;
+                const rowBg = i % 2 === 0 ? rowOddBg : rowEvenBg;
                 return (
                   <tr
                     key={i}
-                    style={{ background: i % 2 === 0 ? '#fff' : '#fafcff' }}
+                    style={{ background: rowBg }}
                     onMouseEnter={e =>
-                      ((e.currentTarget as HTMLTableRowElement).style.background = '#f0f4ff')
+                      ((e.currentTarget as HTMLTableRowElement).style.background = headerBg)
                     }
                     onMouseLeave={e =>
-                      ((e.currentTarget as HTMLTableRowElement).style.background =
-                        i % 2 === 0 ? '#fff' : '#fafcff')
+                      ((e.currentTarget as HTMLTableRowElement).style.background = rowBg)
                     }
                   >
                     <td
                       style={{
                         padding: '5px 10px',
-                        borderBottom: '1px solid #eee',
+                        borderBottom: border,
                         color: '#bbb',
                         fontSize: 11,
                         textAlign: 'center',
@@ -274,10 +280,10 @@ export default function EcdsDataTable({
                           key={col}
                           style={{
                             padding: '5px 10px',
-                            borderBottom: '1px solid #eee',
+                            borderBottom: border,
                             textAlign: isNum ? 'right' : 'left',
                             fontVariantNumeric: 'tabular-nums',
-                            background: bg,        // undefined = React không set attribute → CSS cascade tự nhiên
+                            background: bg,
                             whiteSpace: 'nowrap',
                           }}
                         >
@@ -300,7 +306,7 @@ export default function EcdsDataTable({
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '5px 10px',
-          borderTop: '1px solid #eee',
+          borderTop: border,
           fontSize: 11,
           color: '#888',
           flexShrink: 0,

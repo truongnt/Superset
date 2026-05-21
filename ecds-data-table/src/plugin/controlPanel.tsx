@@ -126,6 +126,70 @@ const config: ControlPanelConfig = {
       ],
     },
 
+    // ── Table style settings ──────────────────────────────────────────────
+    {
+      label: 'Bảng — Màu sắc',
+      expanded: false,
+      controlSetRows: [
+        [
+          {
+            name: 'header_bg',
+            config: {
+              type: 'ColorPickerControl',
+              label: 'Nền header',
+              default: { r: 240, g: 244, b: 255, a: 1 },
+              renderTrigger: true,
+              description: 'Màu nền dòng tiêu đề cột.',
+            },
+          },
+          {
+            name: 'header_text',
+            config: {
+              type: 'ColorPickerControl',
+              label: 'Chữ header',
+              default: { r: 85, g: 85, b: 85, a: 1 },
+              renderTrigger: true,
+              description: 'Màu chữ tiêu đề cột.',
+            },
+          },
+        ],
+        [
+          {
+            name: 'row_odd_bg',
+            config: {
+              type: 'ColorPickerControl',
+              label: 'Nền hàng lẻ',
+              default: { r: 255, g: 255, b: 255, a: 1 },
+              renderTrigger: true,
+              description: 'Màu nền hàng 1, 3, 5, ... (hàng lẻ).',
+            },
+          },
+          {
+            name: 'row_even_bg',
+            config: {
+              type: 'ColorPickerControl',
+              label: 'Nền hàng chẵn',
+              default: { r: 250, g: 252, b: 255, a: 1 },
+              renderTrigger: true,
+              description: 'Màu nền hàng 2, 4, 6, ... (hàng chẵn).',
+            },
+          },
+        ],
+        [
+          {
+            name: 'border_color',
+            config: {
+              type: 'ColorPickerControl',
+              label: 'Màu viền',
+              default: { r: 238, g: 238, b: 238, a: 1 },
+              renderTrigger: true,
+              description: 'Màu đường kẻ giữa các ô và footer.',
+            },
+          },
+        ],
+      ],
+    },
+
     // ── Heatmap settings ───────────────────────────────────────────────────
     {
       label: 'Heatmap',
