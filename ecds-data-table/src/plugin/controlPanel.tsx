@@ -6,6 +6,9 @@ const isAggregate = ({ controls }: any) =>
 const isRaw = ({ controls }: any) =>
   controls?.query_mode?.value === 'raw_records';
 
+const isHeatmap = ({ controls }: any) =>
+  Boolean(controls?.enable_heatmap?.value);
+
 const config: ControlPanelConfig = {
   controlPanelSections: [
     sections.legacyTimeseriesTime,
@@ -30,20 +33,28 @@ const config: ControlPanelConfig = {
             },
           },
         ],
-        // ── Aggregate mode ──────────────────────────────────────
-        [
-          {
-            name: 'metrics',
-            config: { visibility: isAggregate } as any,
-          },
-        ],
-        [
-          {
-            name: 'groupby',
-            config: { visibility: isAggregate } as any,
-          },
-        ],
-        // ── Raw records mode ────────────────────────────────────
+        ['adhoc_filters'],
+        ['row_limit'],
+      ],
+    },
+
+    // ── Aggregate mode section ─────────────────────────────────────────────
+    {
+      label: 'Aggregate — Nhóm và tổng hợp',
+      expanded: true,
+      visibility: isAggregate,
+      controlSetRows: [
+        ['metrics'],
+        ['groupby'],
+      ],
+    },
+
+    // ── Raw records mode section ───────────────────────────────────────────
+    {
+      label: 'Raw Records — Chọn cột',
+      expanded: true,
+      visibility: isRaw,
+      controlSetRows: [
         [
           {
             name: 'all_columns',
@@ -55,12 +66,9 @@ const config: ControlPanelConfig = {
               mapStateToProps: (state: any) => {
                 const cols: string[] =
                   state.datasource?.columns?.map((c: any) => c.column_name) ?? [];
-                return {
-                  choices: cols.map(c => [c, c]),
-                };
+                return { choices: cols.map(c => [c, c]) };
               },
               renderTrigger: false,
-              visibility: isRaw,
               description: 'Chọn các cột muốn hiển thị. Để trống = lấy tất cả cột.',
             },
           },
@@ -84,16 +92,14 @@ const config: ControlPanelConfig = {
                 };
               },
               renderTrigger: false,
-              visibility: isRaw,
               description: 'Thứ tự sắp xếp mặc định khi load (user vẫn có thể sort lại trên UI).',
             },
           },
         ],
-        // ── Shared ──────────────────────────────────────────────
-        ['adhoc_filters'],
-        ['row_limit'],
       ],
     },
+
+    // ── Display settings ───────────────────────────────────────────────────
     {
       label: 'Hiển thị',
       expanded: true,
@@ -119,6 +125,8 @@ const config: ControlPanelConfig = {
         ],
       ],
     },
+
+    // ── Heatmap settings ───────────────────────────────────────────────────
     {
       label: 'Heatmap',
       expanded: true,
@@ -150,7 +158,7 @@ const config: ControlPanelConfig = {
               renderTrigger: true,
               description:
                 'Cột: so sánh trong cùng cột. Hàng: so sánh trong cùng hàng. Toàn bảng: so sánh tất cả ô số.',
-              visibility: ({ controls }: any) => Boolean(controls?.enable_heatmap?.value),
+              visibility: isHeatmap,
             },
           },
         ],
@@ -163,7 +171,7 @@ const config: ControlPanelConfig = {
               default: { r: 255, g: 255, b: 255, a: 1 },
               renderTrigger: true,
               description: 'Màu tô cho ô có giá trị nhỏ nhất.',
-              visibility: ({ controls }: any) => Boolean(controls?.enable_heatmap?.value),
+              visibility: isHeatmap,
             },
           },
           {
@@ -174,7 +182,7 @@ const config: ControlPanelConfig = {
               default: { r: 220, g: 38, b: 38, a: 1 },
               renderTrigger: true,
               description: 'Màu tô cho ô có giá trị lớn nhất.',
-              visibility: ({ controls }: any) => Boolean(controls?.enable_heatmap?.value),
+              visibility: isHeatmap,
             },
           },
         ],
