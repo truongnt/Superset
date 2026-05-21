@@ -165,7 +165,7 @@ export default function EcdsDataTable({
         >
           <thead>
             {/* Column headers */}
-            <tr style={{ background: headerBg, position: 'sticky', top: 0, zIndex: 2 }}>
+            <tr style={{ backgroundColor: headerBg, position: 'sticky', top: 0, zIndex: 2 }}>
               <th
                 style={{
                   padding: '7px 10px',
@@ -254,13 +254,19 @@ export default function EcdsDataTable({
                 return (
                   <tr
                     key={i}
-                    style={{ background: rowBg }}
-                    onMouseEnter={e =>
-                      ((e.currentTarget as HTMLTableRowElement).style.background = headerBg)
-                    }
-                    onMouseLeave={e =>
-                      ((e.currentTarget as HTMLTableRowElement).style.background = rowBg)
-                    }
+                    onMouseEnter={e => {
+                      const tds = (e.currentTarget as HTMLTableRowElement).querySelectorAll('td');
+                      tds.forEach(td => { td.style.backgroundColor = headerBg; });
+                    }}
+                    onMouseLeave={e => {
+                      const tds = (e.currentTarget as HTMLTableRowElement).querySelectorAll('td');
+                      tds.forEach((td, j) => {
+                        // restore: first td (row number) uses rowBg, data cells use stored value
+                        td.style.backgroundColor = j === 0
+                          ? rowBg
+                          : (td.dataset.heatBg || rowBg);
+                      });
+                    }}
                   >
                     <td
                       style={{
@@ -269,6 +275,7 @@ export default function EcdsDataTable({
                         color: '#bbb',
                         fontSize: 11,
                         textAlign: 'center',
+                        backgroundColor: rowBg,
                       }}
                     >
                       {globalIdx}
@@ -277,16 +284,18 @@ export default function EcdsDataTable({
                       const val = row[col];
                       const n = Number(val);
                       const isNum = val !== null && val !== '' && !isNaN(n);
-                      const bg = getCellBg(col, val, row, heatmapScope);
+                      const heatColor = getCellBg(col, val, row, heatmapScope);
+                      const cellBg = heatColor ?? rowBg;
                       return (
                         <td
                           key={col}
+                          data-heat-bg={heatColor ?? ''}
                           style={{
                             padding: '5px 10px',
                             borderBottom: border,
                             textAlign: isNum ? 'right' : 'left',
                             fontVariantNumeric: 'tabular-nums',
-                            background: bg,
+                            backgroundColor: cellBg,
                             whiteSpace: 'nowrap',
                           }}
                         >
