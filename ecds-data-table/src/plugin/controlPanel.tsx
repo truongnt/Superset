@@ -10,8 +10,6 @@ const isHeatmap = ({ controls }: any) =>
   Boolean(controls?.enable_heatmap?.value);
 
 const config: ControlPanelConfig = {
-  // Strip metrics/groupby before buildQuery when in raw mode so Superset
-  // doesn't fail validation requiring at least one metric.
   formDataOverrides: formData => {
     if ((formData as any).query_mode === 'raw_records') {
       return { ...formData, metrics: [], groupby: [] };
@@ -20,6 +18,8 @@ const config: ControlPanelConfig = {
   },
   controlPanelSections: [
     sections.legacyTimeseriesTime,
+
+    // ── Query ──────────────────────────────────────────────────────────────
     {
       label: 'Query',
       expanded: true,
@@ -41,28 +41,28 @@ const config: ControlPanelConfig = {
             },
           },
         ],
-        ['adhoc_filters'],
-        ['row_limit'],
-      ],
-    },
-
-    // ── Aggregate mode section ─────────────────────────────────────────────
-    {
-      label: 'Aggregate — Nhóm và tổng hợp',
-      expanded: true,
-      visibility: isAggregate,
-      controlSetRows: [
-        ['metrics'],
-        ['groupby'],
-      ],
-    },
-
-    // ── Raw records mode section ───────────────────────────────────────────
-    {
-      label: 'Raw Records — Chọn cột',
-      expanded: true,
-      visibility: isRaw,
-      controlSetRows: [
+        // Built-in controls: dùng 'override' (không phải 'config') + resetOnHide: false
+        // validators: [] bỏ validator "required" mặc định của metrics
+        [
+          {
+            name: 'groupby',
+            override: {
+              visibility: isAggregate,
+              resetOnHide: false,
+            },
+          },
+        ],
+        [
+          {
+            name: 'metrics',
+            override: {
+              validators: [],
+              visibility: isAggregate,
+              resetOnHide: false,
+            },
+          },
+        ],
+        // Raw records controls
         [
           {
             name: 'all_columns',
@@ -77,6 +77,8 @@ const config: ControlPanelConfig = {
                 return { choices: cols.map(c => [c, c]) };
               },
               renderTrigger: false,
+              visibility: isRaw,
+              resetOnHide: false,
               description: 'Chọn các cột muốn hiển thị. Để trống = lấy tất cả cột.',
             },
           },
@@ -100,10 +102,14 @@ const config: ControlPanelConfig = {
                 };
               },
               renderTrigger: false,
-              description: 'Thứ tự sắp xếp mặc định khi load (user vẫn có thể sort lại trên UI).',
+              visibility: isRaw,
+              resetOnHide: false,
+              description: 'Thứ tự sắp xếp mặc định khi load.',
             },
           },
         ],
+        ['adhoc_filters'],
+        ['row_limit'],
       ],
     },
 
@@ -134,7 +140,7 @@ const config: ControlPanelConfig = {
       ],
     },
 
-    // ── Table style settings ──────────────────────────────────────────────
+    // ── Table style settings ───────────────────────────────────────────────
     {
       label: 'Bảng — Màu sắc',
       expanded: false,
@@ -169,7 +175,7 @@ const config: ControlPanelConfig = {
               label: 'Nền hàng lẻ',
               default: { r: 255, g: 255, b: 255, a: 1 },
               renderTrigger: true,
-              description: 'Màu nền hàng 1, 3, 5, ... (hàng lẻ).',
+              description: 'Màu nền hàng 1, 3, 5, ...',
             },
           },
           {
@@ -179,7 +185,7 @@ const config: ControlPanelConfig = {
               label: 'Nền hàng chẵn',
               default: { r: 250, g: 252, b: 255, a: 1 },
               renderTrigger: true,
-              description: 'Màu nền hàng 2, 4, 6, ... (hàng chẵn).',
+              description: 'Màu nền hàng 2, 4, 6, ...',
             },
           },
         ],
@@ -211,7 +217,7 @@ const config: ControlPanelConfig = {
               label: 'Bật heatmap',
               default: false,
               renderTrigger: true,
-              description: 'Tô màu ô dựa theo giá trị — mỗi cột số tự tính min/max riêng.',
+              description: 'Tô màu ô dựa theo giá trị.',
             },
           },
         ],
