@@ -10,6 +10,14 @@ const isHeatmap = ({ controls }: any) =>
   Boolean(controls?.enable_heatmap?.value);
 
 const config: ControlPanelConfig = {
+  // Strip metrics/groupby before buildQuery when in raw mode so Superset
+  // doesn't fail validation requiring at least one metric.
+  formDataOverrides: formData => {
+    if ((formData as any).query_mode === 'raw_records') {
+      return { ...formData, metrics: [], groupby: [] };
+    }
+    return formData;
+  },
   controlPanelSections: [
     sections.legacyTimeseriesTime,
     {
