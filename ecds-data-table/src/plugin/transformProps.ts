@@ -20,12 +20,6 @@ function metricKey(m: any): string {
   return String(m);
 }
 
-function toRgba(c: RgbColor): string {
-  return `rgba(${c.r},${c.g},${c.b},${c.a ?? 1})`;
-}
-
-export { toRgba };
-
 export default function transformProps(chartProps: ChartProps): EcdsDataTableProps {
   const { width, height, formData, queriesData } = chartProps;
   const fd = formData as any;

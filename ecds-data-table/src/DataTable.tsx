@@ -1,6 +1,9 @@
 import React, { useState, useMemo, CSSProperties } from 'react';
 import { EcdsDataTableProps, RgbColor, HeatmapScope } from './types';
-import { toRgba } from './plugin/transformProps';
+
+function toRgba(c: RgbColor): string {
+  return `rgba(${c.r},${c.g},${c.b},${c.a ?? 1})`;
+}
 
 const BTN: CSSProperties = {
   padding: '2px 8px',
