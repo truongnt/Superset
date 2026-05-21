@@ -1,4 +1,5 @@
 import React, { useState, useMemo, CSSProperties } from 'react';
+import * as XLSX from 'xlsx';
 import { EcdsDataTableProps, RgbColor, HeatmapScope } from './types';
 
 function toRgba(c: RgbColor): string {
@@ -146,6 +147,27 @@ export default function EcdsDataTable({
   }
 
   const hasFilter = Object.values(filters).some(Boolean);
+
+  function downloadExcel() {
+    const headers = columns.map(col => columnLabels[col] || col);
+    const wsData = [
+      headers,
+      ...sorted.map(row =>
+        columns.map(col => {
+          const val = row[col];
+          const isTemporal = temporalColumns.has(col);
+          if (!isTemporal && val !== null && val !== '' && !isNaN(Number(val))) {
+            return Number(val);
+          }
+          return val ?? '';
+        }),
+      ),
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Data');
+    XLSX.writeFile(wb, 'export.xlsx');
+  }
 
   return (
     <div
@@ -344,6 +366,13 @@ export default function EcdsDataTable({
           </span>
           {sorted.length.toLocaleString('vi-VN')} dòng
           {hasFilter ? ` (lọc từ ${data.length.toLocaleString('vi-VN')})` : ''}
+          <button
+            style={{ ...BTN, marginLeft: 6 }}
+            onClick={downloadExcel}
+            title="Tải xuống Excel"
+          >
+            ⬇ Excel
+          </button>
         </span>
 
         {totalPages > 1 && (

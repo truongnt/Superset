@@ -25,9 +25,12 @@ function metricKey(m: any): string {
 
 export default function transformProps(chartProps: ChartProps): EcdsDataTableProps {
   const { width, height, formData, queriesData } = chartProps;
+  // rawFormData contains the original user-set values before Superset's pipeline
+  // strips custom fields; formData is only reliable for standardized fields (metrics/groupby)
+  const rfd = (chartProps as any).rawFormData as any;
   const fd = formData as any;
 
-  const queryMode: QueryMode = fd.query_mode ?? 'aggregate';
+  const queryMode: QueryMode = rfd.query_mode ?? 'aggregate';
   const queryResult = queriesData[0] ?? {};
   const rows = (queryResult.data ?? []) as DataRecord[];
   const colnames: string[] = (queryResult as any).colnames ?? [];
@@ -57,7 +60,7 @@ export default function transformProps(chartProps: ChartProps): EcdsDataTablePro
   const columnLabels: Record<string, string> = {};
 
   if (queryMode === 'raw_records') {
-    const selected: string[] = fd.all_columns ?? [];
+    const selected: string[] = rfd.all_columns ?? [];
     columns = selected.length > 0 ? selected : firstRowKeys;
     columns.forEach(col => { columnLabels[col] = col; });
   } else {
@@ -79,11 +82,11 @@ export default function transformProps(chartProps: ChartProps): EcdsDataTablePro
   }
 
   const tableStyle: TableStyle = {
-    headerBg:    fd.header_bg    ?? DEFAULT_STYLE.headerBg,
-    headerText:  fd.header_text  ?? DEFAULT_STYLE.headerText,
-    rowOddBg:    fd.row_odd_bg   ?? DEFAULT_STYLE.rowOddBg,
-    rowEvenBg:   fd.row_even_bg  ?? DEFAULT_STYLE.rowEvenBg,
-    borderColor: fd.border_color ?? DEFAULT_STYLE.borderColor,
+    headerBg:    rfd.header_bg    ?? DEFAULT_STYLE.headerBg,
+    headerText:  rfd.header_text  ?? DEFAULT_STYLE.headerText,
+    rowOddBg:    rfd.row_odd_bg   ?? DEFAULT_STYLE.rowOddBg,
+    rowEvenBg:   rfd.row_even_bg  ?? DEFAULT_STYLE.rowEvenBg,
+    borderColor: rfd.border_color ?? DEFAULT_STYLE.borderColor,
   };
 
   return {
@@ -94,11 +97,11 @@ export default function transformProps(chartProps: ChartProps): EcdsDataTablePro
     columnLabels,
     temporalColumns,
     queryMode,
-    enableHeatmap: fd.enable_heatmap ?? false,
-    heatmapColorLow:  fd.heatmap_color_low  ?? DEFAULT_LOW,
-    heatmapColorHigh: fd.heatmap_color_high ?? DEFAULT_HIGH,
-    heatmapScope: fd.heatmap_scope ?? 'column',
-    pageSize: fd.page_size ?? 50,
+    enableHeatmap: rfd.enable_heatmap ?? false,
+    heatmapColorLow:  rfd.heatmap_color_low  ?? DEFAULT_LOW,
+    heatmapColorHigh: rfd.heatmap_color_high ?? DEFAULT_HIGH,
+    heatmapScope: rfd.heatmap_scope ?? 'column',
+    pageSize: rfd.page_size ?? 50,
     tableStyle,
   };
 }

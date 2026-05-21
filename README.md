@@ -81,17 +81,21 @@ Choropleth map where region boundaries are loaded from a dataset in GeoJSON form
 **Chart key:** `ecds_data_table`
 **Location:** [ecds-data-table/](ecds-data-table/)
 
-Bảng số liệu tương tác với filter từng cột, sort và heatmap tô màu theo giá trị.
+Bảng số liệu tương tác với filter, sort, heatmap tô màu và export Excel.
 
 **Capabilities:**
+- **Hai chế độ query:** Aggregate (groupby + metrics) và Raw records (toàn bộ dòng, chọn cột tùy ý)
 - **Filter** inline tại mỗi cột — nhập text lọc ngay dưới header, cột đang lọc highlight viền xanh
-- **Sort** click header — toggle tăng/giảm, indicator ▲▼, nhiều lần click đổi chiều
-- **Heatmap** 3 chế độ: theo cột (min/max riêng từng cột), theo hàng (so sánh các chỉ số trong cùng hàng), toàn bảng (1 thang màu chung); 3 bảng màu: đỏ / xanh dương / xanh lá
-- **Pagination** có thể tắt (hiển thị tất cả) hoặc chọn 20/50/100/200 dòng/trang
-- Số tự căn phải + format locale `vi-VN`, cột text căn trái
-- Footer hiển thị tổng số dòng và số dòng sau khi lọc
+- **Sort** click header — toggle tăng/giảm, indicator ▲▼; sort số đúng thứ tự numeric, sort text theo locale `vi`
+- **Heatmap** 3 phạm vi: theo cột / theo hàng / toàn bảng; màu low/high tùy chỉnh qua ColorPicker
+- **Pagination** tắt được (hiển thị tất cả) hoặc 20/50/100/200 dòng/trang
+- **Tùy chỉnh màu sắc bảng:** nền header, chữ header, hàng lẻ/chẵn, màu viền — tất cả qua ColorPickerControl
+- **Datetime columns** tự động format đúng (không hiển thị epoch milliseconds)
+- **Export Excel** — nút ⬇ Excel trong footer, export toàn bộ dòng đang filter/sort (không giới hạn trang)
+- Số tự căn phải + format locale `vi-VN`; cột text căn trái
+- Footer badge hiển thị chế độ query, tổng số dòng, số dòng sau khi lọc
 
-**Typical uses:** bảng báo cáo dịch bệnh theo tỉnh/huyện, so sánh chỉ số nhiều chiều, xuất dữ liệu dạng bảng có điều kiện màu.
+**Typical uses:** bảng báo cáo dịch bệnh theo tỉnh/huyện, so sánh chỉ số nhiều chiều, xuất dữ liệu có điều kiện màu ra Excel.
 
 ---
 
