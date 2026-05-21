@@ -1,4 +1,4 @@
-import { ControlPanelConfig, sections } from '@superset-ui/chart-controls';
+import { ControlPanelConfig, sections, getStandardizedControls } from '@superset-ui/chart-controls';
 
 const isAggregate = ({ controls }: any) =>
   (controls?.query_mode?.value ?? 'aggregate') === 'aggregate';
@@ -10,11 +10,16 @@ const isHeatmap = ({ controls }: any) =>
   Boolean(controls?.enable_heatmap?.value);
 
 const config: ControlPanelConfig = {
+  // Phải dùng getStandardizedControls() để Superset pipeline giữ nguyên toàn bộ
+  // custom fields (enable_heatmap, header_bg, ...) trong formData khi qua formDataOverrides.
+  // Nếu chỉ return formData, Superset có thể replace bằng version stripped của nó.
   formDataOverrides: formData => {
-    if ((formData as any).query_mode === 'raw_records') {
-      return { ...formData, metrics: [], groupby: [] };
-    }
-    return formData;
+    const isRawMode = (formData as any).query_mode === 'raw_records';
+    return {
+      ...formData,
+      metrics: isRawMode ? [] : getStandardizedControls().popAllMetrics(),
+      groupby: isRawMode ? [] : getStandardizedControls().popAllColumns(),
+    };
   },
   controlPanelSections: [
     sections.legacyTimeseriesTime,
