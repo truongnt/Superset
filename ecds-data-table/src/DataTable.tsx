@@ -1,5 +1,5 @@
 import React, { useState, useMemo, CSSProperties } from 'react';
-import { EcdsDataTableProps, RgbColor, HeatmapScope, QueryMode } from './types';
+import { EcdsDataTableProps, RgbColor, HeatmapScope } from './types';
 
 const BTN: CSSProperties = {
   padding: '2px 8px',

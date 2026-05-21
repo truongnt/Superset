@@ -34,13 +34,13 @@ const config: ControlPanelConfig = {
         [
           {
             name: 'metrics',
-            config: { visibility: isAggregate },
+            config: { visibility: isAggregate } as any,
           },
         ],
         [
           {
             name: 'groupby',
-            config: { visibility: isAggregate },
+            config: { visibility: isAggregate } as any,
           },
         ],
         // ── Raw records mode ────────────────────────────────────
