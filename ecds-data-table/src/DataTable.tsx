@@ -208,7 +208,8 @@ export default function EcdsDataTable({
                   <input
                     value={filters[col] || ''}
                     onChange={e => {
-                      setFilters(f => ({ ...f, [col]: e.target.value }));
+                      const v = e.target.value;
+                      setFilters(f => ({ ...f, [col]: v }));
                       setPage(0);
                     }}
                     placeholder="Lọc..."
