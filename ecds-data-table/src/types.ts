@@ -16,6 +16,7 @@ export interface EcdsDataTableProps {
   data: Array<Record<string, any>>;
   columns: string[];
   columnLabels: Record<string, string>;
+  temporalColumns: Set<string>;
   queryMode: QueryMode;
   enableHeatmap: boolean;
   heatmapColorLow: RgbColor;

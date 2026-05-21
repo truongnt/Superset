@@ -26,6 +26,7 @@ export default function EcdsDataTable({
   data,
   columns,
   columnLabels,
+  temporalColumns,
   queryMode,
   enableHeatmap,
   heatmapColorLow,
@@ -52,6 +53,7 @@ export default function EcdsDataTable({
 
     const colVals: Record<string, number[]> = {};
     columns.forEach(col => {
+      if (temporalColumns.has(col)) return; // skip datetime columns
       const vals = data
         .filter(r => r[col] !== null && r[col] !== undefined && r[col] !== '')
         .map(r => Number(r[col]))
@@ -72,7 +74,7 @@ export default function EcdsDataTable({
       : null;
 
     return { colRange, globalRange };
-  }, [data, columns, enableHeatmap]);
+  }, [data, columns, enableHeatmap, temporalColumns]);
 
   const filtered = useMemo(() => {
     return data.filter(row =>
@@ -282,8 +284,9 @@ export default function EcdsDataTable({
                     </td>
                     {columns.map(col => {
                       const val = row[col];
+                      const isTemporal = temporalColumns.has(col);
                       const n = Number(val);
-                      const isNum = val !== null && val !== '' && !isNaN(n);
+                      const isNum = !isTemporal && val !== null && val !== '' && !isNaN(n);
                       const heatColor = getCellBg(col, val, row, heatmapScope);
                       const cellBg = heatColor ?? rowBg;
                       return (

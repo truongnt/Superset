@@ -1,4 +1,7 @@
-import { ChartProps, DataRecord, getMetricLabel } from '@superset-ui/core';
+import {
+  ChartProps, DataRecord, getMetricLabel,
+  GenericDataType, getTimeFormatter, TimeFormats,
+} from '@superset-ui/core';
 import { EcdsDataTableProps, QueryMode, RgbColor, TableStyle } from '../types';
 
 const DEFAULT_LOW:  RgbColor = { r: 255, g: 255, b: 255, a: 1 };
@@ -25,8 +28,30 @@ export default function transformProps(chartProps: ChartProps): EcdsDataTablePro
   const fd = formData as any;
 
   const queryMode: QueryMode = fd.query_mode ?? 'aggregate';
-  const rows = (queriesData[0]?.data ?? []) as DataRecord[];
+  const queryResult = queriesData[0] ?? {};
+  const rows = (queryResult.data ?? []) as DataRecord[];
+  const colnames: string[] = (queryResult as any).colnames ?? [];
+  const coltypes: GenericDataType[] = (queryResult as any).coltypes ?? [];
   const firstRowKeys = Object.keys(rows[0] ?? {});
+
+  // Build set of temporal column names from Superset coltypes
+  const temporalColumns = new Set<string>(
+    colnames.filter((_, i) => coltypes[i] === GenericDataType.Temporal),
+  );
+
+  // Format temporal values in-place so DataTable receives readable strings
+  const dateFormatter = getTimeFormatter(TimeFormats.DATABASE_DATETIME);
+  const data = rows.map(row => {
+    if (temporalColumns.size === 0) return row;
+    const out: Record<string, any> = { ...row };
+    temporalColumns.forEach(col => {
+      const v = out[col];
+      if (v !== null && v !== undefined) {
+        out[col] = dateFormatter(v);
+      }
+    });
+    return out;
+  });
 
   let columns: string[];
   const columnLabels: Record<string, string> = {};
@@ -64,9 +89,10 @@ export default function transformProps(chartProps: ChartProps): EcdsDataTablePro
   return {
     width,
     height,
-    data: rows as Array<Record<string, any>>,
+    data,
     columns,
     columnLabels,
+    temporalColumns,
     queryMode,
     enableHeatmap: fd.enable_heatmap ?? false,
     heatmapColorLow:  fd.heatmap_color_low  ?? DEFAULT_LOW,
