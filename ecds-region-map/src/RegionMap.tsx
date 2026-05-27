@@ -521,8 +521,14 @@ const EcdsRegionMap: React.FC<EcdsRegionMapProps> = ({
   // Khi startAtDrillLevel/shouldShowAllCommunes mà filteredDrillUnits rỗng
   // (vd: tỉnh filter không có xã trong map dataset hoặc drillMap key mismatch)
   // → fallback về filteredTopUnits (tỉnh cấp trên) để không bị blank map
+  // Lookup communes: thử drillId trước (uuid), fallback drillCode (province code).
+  // Communes có thể dùng province_code hoặc province_uuid làm parentId tuỳ dataset.
+  const drillUnitsForActive = drillId
+    ? (drillMap[drillId]?.length ? drillMap[drillId] : (drillCode ? drillMap[drillCode] ?? [] : []))
+    : [];
+
   const activeUnits: MapUnit[] = drillId
-    ? (drillMap[drillId] ?? [])
+    ? (drillUnitsForActive.length > 0 ? drillUnitsForActive : filteredTopUnits)
     : (startAtDrillLevel || shouldShowAllCommunes)
       ? (filteredDrillUnits.length > 0 ? filteredDrillUnits : filteredTopUnits)
       : filteredTopUnits;
@@ -557,14 +563,21 @@ const EcdsRegionMap: React.FC<EcdsRegionMapProps> = ({
     }
     if (filteredTopUnits.length === 1 && Object.keys(drillMap).length > 0) {
       const province = filteredTopUnits[0];
-      if (province.id !== lastAutodrillRef.current && drillMap[province.id]?.length) {
-        console.log('→ auto-drill vào:', province.name, province.id);
+      // Fallback: communes có thể dùng province code hoặc UUID làm parentId
+      const drillUnits = drillMap[province.id] ?? drillMap[province.code] ?? [];
+      console.log('→ drillMap[province.id]?.length:', drillMap[province.id]?.length,
+        '| drillMap[province.code]?.length:', drillMap[province.code]?.length,
+        '| effectiveDrillUnits:', drillUnits.length);
+      if (province.id !== lastAutodrillRef.current && drillUnits.length) {
+        // drillId = key thực trong drillMap (id hoặc code) để activeUnits lookup đúng
+        const effectiveDrillId = drillMap[province.id]?.length ? province.id : province.code;
+        console.log('→ auto-drill vào:', province.name, '| effectiveDrillId:', effectiveDrillId);
         lastAutodrillRef.current = province.id;
-        setDrillId(province.id);
+        setDrillId(effectiveDrillId);
         setDrillCode(province.code);
         setDrillName(province.name);
       } else {
-        console.log('→ skip: đã drill hoặc drillMap chưa có xã');
+        console.log('→ skip: đã drill hoặc drillMap chưa có xã (cả id lẫn code đều empty)');
       }
     } else if (filteredTopUnits.length !== 1) {
       if (lastAutodrillRef.current !== null) {
@@ -784,8 +797,11 @@ const EcdsRegionMap: React.FC<EcdsRegionMapProps> = ({
       if (wasDraggedRef.current) return;    // bỏ qua nếu user vừa drag bản đồ
       // startAtDrillLevel / shouldShowAllCommunes: đang ở cấp xã, không drill thêm
       if (!enableDrilldown || drillId || startAtDrillLevel || shouldShowAllCommunes) return;
-      if (drillMap[u.id]?.length) {
-        setDrillId(u.id);
+      // Fallback: thử id trước (UUID), rồi code (province_code làm parentId)
+      const effectiveDrillId = drillMap[u.id]?.length ? u.id
+        : drillMap[u.code]?.length ? u.code : null;
+      if (effectiveDrillId) {
+        setDrillId(effectiveDrillId);
         setDrillCode(u.code);
         setDrillName(u.name);
       }
@@ -839,7 +855,8 @@ const EcdsRegionMap: React.FC<EcdsRegionMapProps> = ({
             // tránh trường hợp id = province_uuid bị dùng chung cho tất cả xã trong tỉnh.
             const reactKey = `${item.level}_${item.code || item.id}_${item.parentId || ''}`;
             const isHover = hovered === reactKey;
-            const canDrill = enableDrilldown && !drillId && !startAtDrillLevel && !shouldShowAllCommunes && !!drillMap[item.id]?.length;
+            const canDrill = enableDrilldown && !drillId && !startAtDrillLevel && !shouldShowAllCommunes
+              && !!(drillMap[item.id]?.length || drillMap[item.code]?.length);
             return (
               <path
                 key={reactKey}
