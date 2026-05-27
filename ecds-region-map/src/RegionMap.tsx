@@ -269,6 +269,23 @@ const EcdsRegionMap: React.FC<EcdsRegionMapProps> = ({
       .then(rows => {
         if (cancelled) return;
 
+        // ── DIAGNOSTIC ──────────────────────────────────────────────────────────
+        const uniqueLevels = [...new Set(rows.map(r => r[mapLevelColumn]))];
+        const noGeomCount  = rows.filter(r => !parseGeom(r[mapGeojsonColumn])).length;
+        const noParentCount = rows.filter(r => Number(r[mapLevelColumn]) === mapDrillLevel && !r[mapParentIdColumn]).length;
+        console.group('[RegionMap] fetchMapUnits result');
+        console.log('rows total          :', rows.length);
+        console.log('unique levels       :', uniqueLevels, '| mapTopLevel:', mapTopLevel, '| mapDrillLevel:', mapDrillLevel);
+        console.log('rows sans geom      :', noGeomCount);
+        console.log('drill rows sans parentId:', noParentCount);
+        if (rows[0]) console.log('sample row keys     :', Object.keys(rows[0]));
+        if (rows[0]) console.log('sample row values   :', JSON.stringify(rows[0]).slice(0, 300));
+        // tìm 1 commune row để debug
+        const sampleCommune = rows.find(r => Number(r[mapLevelColumn]) === mapDrillLevel);
+        if (sampleCommune) console.log('sample commune      :', JSON.stringify({ level: sampleCommune[mapLevelColumn], parentId: sampleCommune[mapParentIdColumn], id: sampleCommune[mapIdColumn], code: sampleCommune[mapDrillCodeColumn || mapCodeColumn] }).slice(0, 200));
+        console.groupEnd();
+        // ────────────────────────────────────────────────────────────────────────
+
         const top: MapUnit[] = [];
         const drill: Record<string, MapUnit[]> = {};
 
