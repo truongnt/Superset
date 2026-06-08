@@ -1,0 +1,295 @@
+<style>
+html, body { margin: 0; padding: 0; overflow: hidden; }
+.host { display: flex; flex-direction: column; width: 100%; height: 100%; }
+.toolbar { display: flex; align-items: center; justify-content: flex-start; padding: 4px 6px; flex-shrink: 0; }
+.wrap { flex: 1; overflow: auto; border: 1px solid #d0d7de; }
+
+table {
+  width: max-content; min-width: 100%;
+  border-collapse: separate; border-spacing: 0;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+th, td {
+  border-right: 1px solid #d0d7de; border-bottom: 1px solid #d0d7de;
+  padding: 6px 8px; text-align: center; vertical-align: middle; background: #fff;
+  white-space: nowrap;
+}
+
+/* Header */
+thead th {
+  position: sticky; top: 0;
+  background: #4276A4; color: #fff; font-weight: 600; z-index: 5; background-clip: padding-box;
+}
+thead th.col-stt  { left: 0;    z-index: 15 !important; min-width: 36px; }
+thead th.col-tinh { left: 36px; z-index: 15 !important; min-width: 160px; text-align: left; }
+thead tr:nth-child(2) th { font-weight: 400; font-size: 11px; }
+
+/* Body sticky cols */
+tbody td.col-stt  { position: sticky; left: 0;    z-index: 2; color: #bbb; font-size: 11px; }
+tbody td.col-tinh { position: sticky; left: 36px; z-index: 2; }
+
+/* Tỉnh row */
+tbody tr.tinh-row td { background: #eef5fb; font-weight: 600; }
+tbody td.col-tinh.dia-phuong {
+  text-align: left; cursor: pointer; user-select: none;
+  border-right: 2px solid #4276A4;
+}
+tbody td.col-tinh.dia-phuong:hover { background: #d8ebf7; }
+tbody tr.tinh-row:hover td { background: #e6f2ff !important; }
+tbody tr.tinh-row:hover td.dia-phuong { background: #cce5f5 !important; }
+
+/* Xã row */
+tbody tr.xa-row td { background: #f8fbff; font-weight: 400; }
+tbody tr.xa-row:hover td { background: #e6f2ff !important; }
+tbody td.col-tinh.xa-name {
+  text-align: left; padding-left: 28px; font-weight: 400;
+  border-right: 2px solid #4276A4; background: #f8fbff;
+}
+
+.mac  { color: #1976d2; font-variant-numeric: tabular-nums; }
+.chet { color: #d32f2f; font-variant-numeric: tabular-nums; }
+
+/* Tổng cộng */
+tbody tr.grand-total td { background: #fff4d6; font-weight: bold; color: #5a4500; border-bottom: 2px solid #d39c00; }
+tbody tr.grand-total td.col-tinh { background: #fff4d6; border-right: 2px solid #d39c00; cursor: default; text-align: left; }
+
+.expand-icon { display: inline-block; width: 16px; font-size: 10px; transition: transform .15s; }
+.tinh-row.expanded .expand-icon { transform: rotate(90deg); }
+
+.btn-export {
+  padding: 4px 12px; border: none; border-radius: 4px;
+  background: #217346; color: #fff; cursor: pointer;
+  font-size: 12px; font-weight: 600; line-height: 1.5; font-family: inherit;
+}
+.btn-export:hover { background: #185c38; }
+</style>
+
+<div class="host">
+  <div class="wrap">
+    <table id="tbl"></table>
+  </div>
+  <div class="toolbar">
+    <button class="btn-export" id="btn-export">⬇ Excel</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ── Tên cột dataset — chỉnh nếu khác ────────────────────────────────────────
+  var COL_TINH = 'ten_tinh';
+  var COL_XA   = 'ten_xa';
+  var COL_DATE = 'ngay_su_kien';
+  var COL_MAC  = 'tong_so';
+  var COL_CHET = 'tu_vong';
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  var data = window.__chartData || window.DATA || [];
+
+  function fitHost() {
+    var host = document.querySelector('.host');
+    if (host) host.style.height = (window.innerHeight || 500) + 'px';
+  }
+  fitHost();
+  window.addEventListener('resize', fitHost);
+
+  function isoWeekInfo(ts) {
+    var d = new Date(ts);
+    d.setHours(0, 0, 0, 0);
+    var day = (d.getDay() + 6) % 7;
+    d.setDate(d.getDate() - day + 3);
+    var year = d.getFullYear();
+    var w1thu = new Date(year, 0, 4);
+    w1thu.setDate(w1thu.getDate() - (w1thu.getDay() + 6) % 7 + 3);
+    var week = 1 + Math.round((d - w1thu) / 604800000);
+    var mon = new Date(ts); mon.setHours(0,0,0,0);
+    mon.setDate(mon.getDate() - (mon.getDay() + 6) % 7);
+    var sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    return { year: year, week: week, key: year * 100 + week, mon: mon, sun: sun };
+  }
+
+  function fmtDate(d) {
+    return String(d.getDate()).padStart(2,'0') + '/' +
+           String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear();
+  }
+
+  function num(r, key) {
+    return +(r[key] || r['SUM__'+key] || r['COUNT__'+key] || 0);
+  }
+
+  function emptyWk() { return { mac: 0, chet: 0 }; }
+
+  // ── Tổng hợp dữ liệu ────────────────────────────────────────────────────────
+  var weekMeta = {};
+  var byTinh   = {};   // ten_tinh → { wks: {wk→{mac,chet}}, xas: {xa→{wk→{mac,chet}}}, xOrder: [] }
+  var tinhSet  = [];
+
+  data.forEach(function (r) {
+    var t  = r[COL_TINH] || '(?)';
+    var x  = r[COL_XA]   || '';
+    var ts = r[COL_DATE];
+
+    if (!byTinh[t]) { byTinh[t] = { wks: {}, xas: {}, xOrder: [] }; tinhSet.push(t); }
+    if (x && !byTinh[t].xas[x]) { byTinh[t].xas[x] = {}; byTinh[t].xOrder.push(x); }
+
+    if (!ts) return;
+
+    var info = isoWeekInfo(+ts);
+    var wk   = info.key;
+    if (!weekMeta[wk]) weekMeta[wk] = info;
+
+    if (!byTinh[t].wks[wk]) byTinh[t].wks[wk] = emptyWk();
+    byTinh[t].wks[wk].mac  += num(r, COL_MAC);
+    byTinh[t].wks[wk].chet += num(r, COL_CHET);
+
+    if (x) {
+      if (!byTinh[t].xas[x][wk]) byTinh[t].xas[x][wk] = emptyWk();
+      byTinh[t].xas[x][wk].mac  += num(r, COL_MAC);
+      byTinh[t].xas[x][wk].chet += num(r, COL_CHET);
+    }
+  });
+
+  var weeks = Object.keys(weekMeta).map(Number).sort(function(a,b){
+    var wa = a % 100, wb = b % 100;
+    if (wa !== wb) return wa - wb;
+    return Math.floor(a/100) - Math.floor(b/100);
+  });
+  var tinhs = tinhSet.sort();
+  var fmt   = function(n){ return (+n||0).toLocaleString('vi-VN'); };
+
+  // Tổng toàn quốc
+  var grand = {};
+  weeks.forEach(function(wk) {
+    grand[wk] = emptyWk();
+    tinhs.forEach(function(t) {
+      var d = byTinh[t].wks[wk];
+      if (d) { grand[wk].mac += d.mac; grand[wk].chet += d.chet; }
+    });
+  });
+
+  // ── Build table ──────────────────────────────────────────────────────────────
+  var tbl = document.getElementById('tbl');
+
+  var r1 = '<tr><th class="col-stt" rowspan="3">#</th><th class="col-tinh" rowspan="3">Địa phương</th>';
+  weeks.forEach(function(wk) {
+    r1 += '<th colspan="2">Tuần ' + weekMeta[wk].week + '</th>';
+  });
+  r1 += '</tr>';
+
+  var r2 = '<tr>';
+  weeks.forEach(function(wk) {
+    var info = weekMeta[wk];
+    r2 += '<th colspan="2" style="font-size:10px;font-weight:400">'
+        + fmtDate(info.mon) + ' - ' + fmtDate(info.sun) + '</th>';
+  });
+  r2 += '</tr>';
+
+  var r3 = '<tr>';
+  weeks.forEach(function() { r3 += '<th>Mắc</th><th>Chết</th>'; });
+  r3 += '</tr>';
+
+  function wkCells(wkMap) {
+    return weeks.map(function(wk) {
+      var d = wkMap[wk] || emptyWk();
+      return '<td class="mac">' + fmt(d.mac) + '</td><td class="chet">' + fmt(d.chet) + '</td>';
+    }).join('');
+  }
+
+  var tbody = '<tbody>';
+  tbody += '<tr class="grand-total">'
+         + '<td class="col-stt"></td>'
+         + '<td class="col-tinh">Tổng cộng</td>'
+         + wkCells(grand) + '</tr>';
+
+  tinhs.forEach(function(t, i) {
+    var tinhId = 'tinh-' + i;
+    var tinh   = byTinh[t];
+    tbody += '<tr class="tinh-row" data-id="' + tinhId + '">'
+           + '<td class="col-stt">' + (i+1) + '</td>'
+           + '<td class="col-tinh dia-phuong"><span class="expand-icon">▶</span>' + t + '</td>'
+           + wkCells(tinh.wks) + '</tr>';
+
+    tinh.xOrder.slice().sort().forEach(function(x) {
+      tbody += '<tr class="xa-row" data-tinh="' + tinhId + '" style="display:none">'
+             + '<td class="col-stt"></td>'
+             + '<td class="col-tinh xa-name">' + x + '</td>'
+             + wkCells(tinh.xas[x]) + '</tr>';
+    });
+  });
+  tbody += '</tbody>';
+
+  tbl.innerHTML = '<thead>' + r1 + r2 + r3 + '</thead>' + tbody;
+
+  // Sticky top động
+  var offset = 0;
+  tbl.querySelectorAll('thead tr').forEach(function(row) {
+    row.querySelectorAll('th').forEach(function(th) { th.style.top = offset + 'px'; });
+    offset += row.offsetHeight;
+  });
+
+  // Expand/collapse
+  tbl.querySelectorAll('.tinh-row').forEach(function(row) {
+    row.addEventListener('click', function() {
+      var id       = this.dataset.id;
+      var expanded = this.classList.toggle('expanded');
+      tbl.querySelectorAll('.xa-row[data-tinh="' + id + '"]').forEach(function(r) {
+        r.style.display = expanded ? 'table-row' : 'none';
+      });
+    });
+  });
+
+  // ── Export CSV ───────────────────────────────────────────────────────────────
+  document.getElementById('btn-export').addEventListener('click', function () {
+    var rows = [];
+    var hdr  = ['#', 'Địa phương'];
+    weeks.forEach(function(wk) {
+      var info  = weekMeta[wk];
+      var label = 'Tuần ' + info.week + ' (' + fmtDate(info.mon) + '-' + fmtDate(info.sun) + ')';
+      hdr.push(label + ' - Mắc', label + ' - Chết');
+    });
+    rows.push(hdr);
+
+    var grandRow = ['', 'Tổng cộng'];
+    weeks.forEach(function(wk) {
+      var d = grand[wk] || emptyWk();
+      grandRow.push(d.mac, d.chet);
+    });
+    rows.push(grandRow);
+
+    tinhs.forEach(function(t, i) {
+      var tinh = byTinh[t];
+      var row  = [i+1, t];
+      weeks.forEach(function(wk) {
+        var d = tinh.wks[wk] || emptyWk();
+        row.push(d.mac, d.chet);
+      });
+      rows.push(row);
+
+      tinh.xOrder.slice().sort().forEach(function(x) {
+        var xrow = ['', '  ' + x];
+        weeks.forEach(function(wk) {
+          var d = tinh.xas[x][wk] || emptyWk();
+          xrow.push(d.mac, d.chet);
+        });
+        rows.push(xrow);
+      });
+    });
+
+    var csv = rows.map(function(r) {
+      return r.map(function(v) {
+        var s = String(v == null ? '' : v);
+        return (s.indexOf(',') >= 0 || s.indexOf('"') >= 0)
+          ? '"' + s.replace(/"/g,'""') + '"' : s;
+      }).join(',');
+    }).join('\r\n');
+
+    var blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href = url; a.download = 'weekly_cases.csv';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  });
+})();
+</script>
