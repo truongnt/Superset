@@ -80,7 +80,7 @@ const config: ControlPanelConfig = {
               },
               renderTrigger: false,
               description: t('Thứ tự sắp xếp dữ liệu trả về từ query.'),
-            },
+            } as any,
           },
         ],
       ],
