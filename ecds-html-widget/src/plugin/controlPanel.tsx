@@ -58,6 +58,29 @@ const config: ControlPanelConfig = {
             },
           },
         ],
+        [
+          {
+            name: 'ecds_sort_cols',
+            config: {
+              type: 'SelectControl',
+              label: t('Sắp xếp'),
+              multi: true,
+              default: [],
+              mapStateToProps: (state: any) => {
+                const cols: string[] =
+                  state.datasource?.columns?.map((c: any) => c.column_name) ?? [];
+                return {
+                  choices: [
+                    ...cols.map((c: string) => [`${c} ASC`, `${c} ↑`]),
+                    ...cols.map((c: string) => [`${c} DESC`, `${c} ↓`]),
+                  ],
+                };
+              },
+              renderTrigger: false,
+              description: t('Thứ tự sắp xếp dữ liệu trả về từ query.'),
+            },
+          },
+        ],
       ],
     },
     {
