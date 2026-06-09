@@ -1,0 +1,235 @@
+<style>
+html, body { margin: 0; padding: 0; overflow: hidden; }
+.xn-host { display: flex; flex-direction: column; width: 100%; height: 100%; }
+.xn-wrap { flex: 1; overflow: auto; border: 1px solid #d0d7de; }
+.xn-toolbar {
+  display: flex; align-items: center; justify-content: flex-start;
+  padding: 4px 6px; flex-shrink: 0;
+}
+.xn-btn {
+  padding: 4px 12px; border: none; border-radius: 4px;
+  background: #217346; color: #fff; cursor: pointer;
+  font-size: 12px; font-weight: 600; line-height: 1.5; font-family: inherit;
+}
+.xn-btn:hover { background: #185c38; }
+.xn-tbl {
+  width: max-content; min-width: 100%;
+  border-collapse: separate; border-spacing: 0;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+.xn-tbl th, .xn-tbl td {
+  border-right: 1px solid #d0d7de; border-bottom: 1px solid #d0d7de;
+  padding: 6px 8px; text-align: center; vertical-align: middle; background: #fff;
+}
+.xn-tbl thead th {
+  position: sticky; top: 0;
+  background: #4276A4; color: #fff; font-weight: 600; z-index: 5; background-clip: padding-box;
+}
+.xn-tbl td.dia-phuong {
+  text-align: left; font-weight: 600; white-space: nowrap;
+  background: #eef5fb; border-right: 2px solid #4276A4;
+  position: sticky; left: 0; z-index: 2; cursor: pointer; user-select: none;
+}
+.xn-tbl td.dia-phuong:hover { background: #d8ebf7; }
+.xn-tbl td.xa-name {
+  text-align: left; white-space: nowrap;
+  background: #f8fbff; border-right: 2px solid #4276A4;
+  padding-left: 28px;
+  position: sticky; left: 0; z-index: 2;
+}
+.xn-tbl tr.xa-row td { background: #f8fbff; }
+.xn-tbl td.num { font-variant-numeric: tabular-nums; min-width: 80px; }
+.xn-tbl tr.grand-total td {
+  background: #fff4d6; font-weight: bold; color: #5a4500; border-bottom: 2px solid #d39c00;
+}
+.xn-tbl tr.grand-total td.dia-phuong {
+  background: #fff4d6; border-right: 2px solid #d39c00; cursor: default;
+}
+.expand-icon { display: inline-block; width: 16px; font-size: 10px; transition: transform .15s; }
+.expanded .expand-icon { transform: rotate(90deg); }
+.xn-tbl tbody tr:not(.grand-total):not(.xa-row):hover td { background: #e6f2ff; }
+.xn-tbl tbody tr:not(.grand-total):not(.xa-row):hover td.dia-phuong { background: #cce5f5; }
+.xn-tbl thead th.sortable { cursor: pointer; user-select: none; }
+.xn-tbl thead th.sortable:hover { filter: brightness(1.2); }
+.sort-icon { font-size: 9px; margin-left: 3px; opacity: .7; }
+</style>
+
+<div class="xn-host">
+  <div class="xn-wrap">
+    <table class="xn-tbl" id="xn-table"></table>
+  </div>
+  <div class="xn-toolbar">
+    <button class="xn-btn" id="btn-export">⬇ Excel</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  var data  = window.DATA || [];
+  var table = document.getElementById('xn-table');
+
+  function fitHost() {
+    var host = document.querySelector('.xn-host');
+    if (host) host.style.height = (window.innerHeight || 500) + 'px';
+  }
+  fitHost();
+  window.addEventListener('resize', fitHost);
+
+  function downloadCSV() {
+    var headers = ['Địa phương'].concat(COLS.map(function(c) { return c.label; }));
+    var rows = [headers];
+
+    function aggRow(name, agg) {
+      return [name, agg.tong_so, agg.ngoai_tru, agg.noi_tru,
+              agg.ra_vien, agg.tu_vong, agg.chuyen_vien, agg.khac];
+    }
+
+    rows.push(aggRow('Toàn quốc', grand));
+    getSortedTinh().forEach(function(t) {
+      rows.push(aggRow(t, byTinh[t]));
+      (xOrder[t] || []).sort().forEach(function(x) {
+        var row = aggRow('  ' + x, byTinh[t].xas[x]);
+        rows.push(row);
+      });
+    });
+
+    var csv = rows.map(function(r) {
+      return r.map(function(v) {
+        var s = String(v == null ? '' : v);
+        return s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0
+          ? '"' + s.replace(/"/g, '""') + '"' : s;
+      }).join(',');
+    }).join('\r\n');
+
+    var blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href = url; a.download = 'export.csv';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  }
+
+  document.getElementById('btn-export').addEventListener('click', downloadCSV);
+
+  var fmt = function(n) { return (+n || 0).toLocaleString('vi-VN'); };
+
+  // Đọc metric từ row — hỗ trợ cả label thuần và prefix SUM__/COUNT__
+  function val(r, key) {
+    return +(r[key] || r['SUM__' + key] || r['COUNT__' + key] || 0);
+  }
+
+  // Tên cột trong dataset — chỉnh tại đây nếu khác
+  var COL_TONG_SO     = 'tong_so';
+  var COL_NGOAI_TRU   = 'dieu_tri_ngoai_tru';
+  var COL_NOI_TRU     = 'dieu_tri_noi_tru';
+  var COL_RA_VIEN     = 'ra_vien';
+  var COL_TU_VONG     = 'tu_vong';
+  var COL_CHUYEN_VIEN = 'chuyen_vien';
+  var COL_KHAC        = 'tinh_trang_khac';
+
+  function emptyAgg() {
+    return { ngoai_tru: 0, noi_tru: 0, ra_vien: 0, tu_vong: 0, chuyen_vien: 0, khac: 0 };
+  }
+  function addAgg(agg, r) {
+    agg.ngoai_tru   += val(r, COL_NGOAI_TRU);
+    agg.noi_tru     += val(r, COL_NOI_TRU);
+    agg.ra_vien     += val(r, COL_RA_VIEN);
+    agg.tu_vong     += val(r, COL_TU_VONG);
+    agg.chuyen_vien += val(r, COL_CHUYEN_VIEN);
+    agg.khac        += val(r, COL_KHAC);
+  }
+
+  var byTinh = {}, xOrder = {}, grand = emptyAgg();
+
+  data.forEach(function(r) {
+    var t = r.ten_tinh || '(?)';
+    var x = r.ten_xa   || '';
+    if (!byTinh[t]) { byTinh[t] = emptyAgg(); byTinh[t].xas = {}; xOrder[t] = []; }
+    if (x && !byTinh[t].xas[x]) { byTinh[t].xas[x] = emptyAgg(); xOrder[t].push(x); }
+    addAgg(byTinh[t], r);
+    if (x) addAgg(byTinh[t].xas[x], r);
+    addAgg(grand, r);
+  });
+
+  var sortCol = null, sortAsc = false;
+
+  function getSortedTinh() {
+    var keys = Object.keys(byTinh);
+    if (!sortCol) return keys.sort();
+    return keys.sort(function(a, b) {
+      var va = byTinh[a][sortCol] || 0, vb = byTinh[b][sortCol] || 0;
+      return sortAsc ? va - vb : vb - va;
+    });
+  }
+
+  function numCells(agg) {
+    var tong = agg.ngoai_tru + agg.noi_tru + agg.ra_vien + agg.tu_vong + agg.chuyen_vien + agg.khac;
+    return '<td class="num">' + fmt(tong)            + '</td>'
+         + '<td class="num">' + fmt(agg.ngoai_tru)   + '</td>'
+         + '<td class="num">' + fmt(agg.noi_tru)     + '</td>'
+         + '<td class="num">' + fmt(agg.ra_vien)     + '</td>'
+         + '<td class="num">' + fmt(agg.tu_vong)     + '</td>'
+         + '<td class="num">' + fmt(agg.chuyen_vien) + '</td>'
+         + '<td class="num">' + fmt(agg.khac)        + '</td>';
+  }
+
+  var COLS = [
+    { key: 'tong_so',     label: 'Tổng số'             },
+    { key: 'ngoai_tru',   label: 'Điều trị ngoại trú' },
+    { key: 'noi_tru',     label: 'Điều trị nội trú'   },
+    { key: 'ra_vien',     label: 'Ra viện'             },
+    { key: 'tu_vong',     label: 'Tử vong'             },
+    { key: 'chuyen_vien', label: 'Chuyển viện'         },
+    { key: 'khac',        label: 'Tình trạng khác'     },
+  ];
+
+  function buildTable() {
+    var head = '<thead><tr><th style="text-align:left;min-width:160px">Địa phương</th>';
+    COLS.forEach(function(c) {
+      var icon = (sortCol === c.key) ? (sortAsc ? ' ▲' : ' ▼') : ' ⇅';
+      head += '<th class="sortable" data-col="' + c.key + '">' + c.label
+            + '<span class="sort-icon">' + icon + '</span></th>';
+    });
+    head += '</tr></thead>';
+
+    var body = '<tbody>';
+    body += '<tr class="grand-total"><td class="dia-phuong">Toàn quốc</td>' + numCells(grand) + '</tr>';
+
+    getSortedTinh().forEach(function(t, idx) {
+      var tinhId = 'tinh-' + idx;
+      body += '<tr class="tinh-row" data-id="' + tinhId + '">'
+            + '<td class="dia-phuong"><span class="expand-icon">▶</span>' + t + '</td>'
+            + numCells(byTinh[t]) + '</tr>';
+      (xOrder[t] || []).sort().forEach(function(x) {
+        body += '<tr class="xa-row" data-tinh="' + tinhId + '" style="display:none">'
+              + '<td class="xa-name">' + x + '</td>'
+              + numCells(byTinh[t].xas[x]) + '</tr>';
+      });
+    });
+    body += '</tbody>';
+    table.innerHTML = head + body;
+
+    table.querySelectorAll('.tinh-row').forEach(function(row) {
+      row.addEventListener('click', function() {
+        var id = this.dataset.id;
+        var expanded = this.classList.toggle('expanded');
+        table.querySelectorAll('.xa-row[data-tinh="' + id + '"]').forEach(function(r) {
+          r.style.display = expanded ? 'table-row' : 'none';
+        });
+      });
+    });
+
+    table.querySelectorAll('thead th.sortable').forEach(function(th) {
+      th.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var col = th.dataset.col;
+        if (sortCol === col) { sortAsc = !sortAsc; } else { sortCol = col; sortAsc = false; }
+        buildTable();
+      });
+    });
+  }
+
+  buildTable();
+})();
+</script>
