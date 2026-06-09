@@ -54,6 +54,11 @@ export interface EcdsRegionMapProps {
   queriedCommuneCodes: string[];             // mã xã từ native filter theo cột mã (rỗng = không filter)
   queriedCommuneNames: string[];             // tên xã từ native filter theo cột tên (rỗng = không filter)
   metricName: string;
+  metricNames: string[];                                          // tất cả metric labels
+  allMetricsByCode:      Record<string, Record<string, number>>; // mã tỉnh → {metricLabel → value}
+  allMetricsByDrillCode: Record<string, Record<string, number>>; // mã xã   → {metricLabel → value}
+  adhocProvinceCodes: string[];  // mã tỉnh từ adhoc/extra filter (chỉ dùng để detect auto-drill)
+  adhocProvinceNames: string[];  // tên tỉnh từ adhoc/extra filter (chỉ dùng để detect auto-drill)
 
   // ── Timelapse ──────────────────────────────────────────────
   timelapseEnabled: boolean;

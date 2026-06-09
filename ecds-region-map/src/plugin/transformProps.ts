@@ -41,6 +41,40 @@ function getNativeFilterValues(fd: any, col: string): string[] {
   return values;
 }
 
+// Đọc từ adhoc chart filter + legacy extra filter — chỉ dùng để detect auto-drill,
+// KHÔNG dùng để filter filteredTopUnits (tránh thu hẹp bản đồ khi dùng adhoc filter)
+function getAdhocFilterValues(fd: any, col: string): string[] {
+  if (!col) return [];
+  const values: string[] = [];
+
+  const adhocFilters: any[] = fd.adhocFilters ?? fd.adhoc_filters ?? [];
+  for (const f of adhocFilters) {
+    if (f.expressionType !== 'SIMPLE') continue;
+    const subject = f.subject?.includes('.') ? f.subject.split('.').pop() : f.subject;
+    if (subject !== col && f.subject !== col) continue;
+    const op = (f.operator ?? f.op ?? '').toUpperCase();
+    if (op === 'IN' && Array.isArray(f.comparator)) {
+      f.comparator.forEach((v: any) => { const s = String(v ?? '').trim(); if (s) values.push(s); });
+    } else if ((op === '==' || op === 'EQUALS') && f.comparator != null) {
+      const s = String(f.comparator).trim();
+      if (s) values.push(s);
+    }
+  }
+
+  const extraFilters: any[] = fd.extraFilters ?? fd.extra_filters ?? [];
+  for (const f of extraFilters) {
+    const colName = f.col?.includes('.') ? f.col.split('.').pop() : f.col;
+    if (colName !== col && f.col !== col) continue;
+    if (f.op === 'IN' && Array.isArray(f.val)) {
+      f.val.forEach((v: any) => { const s = String(v ?? '').trim(); if (s) values.push(s); });
+    } else if ((f.op === '==' || f.op === 'EQUALS') && f.val != null) {
+      const s = String(f.val).trim();
+      if (s) values.push(s);
+    }
+  }
+  return values;
+}
+
 
 /**
  * Kiểm tra có value filter (IN/==) trên bất kỳ cột nào không.
@@ -92,6 +126,7 @@ export default function transformProps(chartProps: EcdsRegionMapChartProps): Ecd
 
   const fdMetrics: any[] = fd.metrics ?? [];
   const metricName            = metricToLabel(fdMetrics[0]);
+  const metricNames: string[] = fdMetrics.map(metricToLabel).filter(Boolean);
   const regionIdCol: string   = fd.region_id_column         ?? fd.regionIdColumn         ?? '';
   const regionNameCol: string = fd.region_name_column        ?? fd.regionNameColumn        ?? '';
   const regionDrillIdCol: string   = fd.region_drill_id_column   ?? fd.regionDrillIdColumn   ?? '';
@@ -106,6 +141,10 @@ export default function transformProps(chartProps: EcdsRegionMapChartProps): Ecd
   const metricByCode: Record<string, number> = {};
   // Build: mã xã → tổng metric
   const metricByDrillCode: Record<string, number> = {};
+  // Build: mã tỉnh → tất cả metrics (cho tooltip)
+  const allMetricsByCode: Record<string, Record<string, number>> = {};
+  // Build: mã xã → tất cả metrics (cho tooltip)
+  const allMetricsByDrillCode: Record<string, Record<string, number>> = {};
   // Mã tỉnh xuất hiện trong data rows (đã được SQL filter đúng)
   const queriedProvinceSet = new Set<string>();
   // Timelapse: metric grouped theo mốc thời gian
@@ -121,6 +160,20 @@ export default function transformProps(chartProps: EcdsRegionMapChartProps): Ecd
 
     const cCode = String(row[regionDrillIdCol] ?? '').trim();
     if (cCode) metricByDrillCode[cCode] = (metricByDrillCode[cCode] ?? 0) + num;
+
+    // Tích lũy tất cả metrics cho tooltip
+    for (const mName of metricNames) {
+      const mVal = row[mName];
+      const mNum = mVal != null ? Number(mVal) : 0;
+      if (pCode) {
+        if (!allMetricsByCode[pCode]) allMetricsByCode[pCode] = {};
+        allMetricsByCode[pCode][mName] = (allMetricsByCode[pCode][mName] ?? 0) + mNum;
+      }
+      if (cCode) {
+        if (!allMetricsByDrillCode[cCode]) allMetricsByDrillCode[cCode] = {};
+        allMetricsByDrillCode[cCode][mName] = (allMetricsByDrillCode[cCode][mName] ?? 0) + mNum;
+      }
+    }
 
     // Timelapse: group theo time column
     if (timelapseEnabled && timeCol) {
@@ -172,6 +225,11 @@ export default function transformProps(chartProps: EcdsRegionMapChartProps): Ecd
   const queriedProvinceNames           = getNativeFilterValues(fd, regionNameCol);
   const queriedCommuneCodes            = getNativeFilterValues(fd, regionDrillIdCol);
   const queriedCommuneNames            = getNativeFilterValues(fd, regionDrillNameCol);
+
+  // Adhoc/extra filter values — chỉ dùng để detect auto-drill trong component,
+  // không ảnh hưởng filteredTopUnits (tránh thu hẹp bản đồ khi dùng adhoc filter)
+  const adhocProvinceCodes = getAdhocFilterValues(fd, regionIdCol);
+  const adhocProvinceNames = getAdhocFilterValues(fd, regionNameCol);
 
   // hasExplicitGeoFilter = true chỉ khi có filter nhắm đúng cột tỉnh hoặc xã
   const hasExplicitGeoFilter = (
@@ -253,6 +311,11 @@ export default function transformProps(chartProps: EcdsRegionMapChartProps): Ecd
     queriedCommuneCodes,
     queriedCommuneNames,
     metricName,
+    metricNames,
+    allMetricsByCode,
+    adhocProvinceCodes,
+    adhocProvinceNames,
+    allMetricsByDrillCode,
 
     mapDatasetId: Number(fd.map_dataset_id ?? fd.mapDatasetId ?? 0),
     mapIdColumn:        fd.map_id_column         ?? fd.mapIdColumn        ?? 'id',

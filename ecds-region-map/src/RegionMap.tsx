@@ -178,6 +178,11 @@ const EcdsRegionMap: React.FC<EcdsRegionMapProps> = ({
   queriedCommuneCodes,
   queriedCommuneNames,
   metricName,
+  metricNames,
+  allMetricsByCode,
+  allMetricsByDrillCode,
+  adhocProvinceCodes,
+  adhocProvinceNames,
   mapDatasetId,
   mapIdColumn,
   mapCodeColumn,
@@ -226,7 +231,9 @@ const EcdsRegionMap: React.FC<EcdsRegionMapProps> = ({
   const svgRef = useRef<SVGSVGElement>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<{
-    x: number; y: number; id: string; code: string; name: string; value: number | undefined;
+    x: number; y: number; id: string; code: string; name: string;
+    value: number | undefined;
+    values: Record<string, number>;
   } | null>(null);
   const [zoom, setZoom] = useState({ k: 1, tx: 0, ty: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -548,7 +555,7 @@ const EcdsRegionMap: React.FC<EcdsRegionMapProps> = ({
     ? (drillUnitsForActive.length > 0 ? drillUnitsForActive : filteredTopUnits)
     : (startAtDrillLevel || shouldShowAllCommunes)
       ? (filteredDrillUnits.length > 0 ? filteredDrillUnits : filteredTopUnits)
-      : filteredTopUnits;
+      : topUnits;
 
   // ── DEBUG activeUnits ──────────────────────────────────────────────────────
   console.log(
@@ -609,6 +616,36 @@ const EcdsRegionMap: React.FC<EcdsRegionMapProps> = ({
     }
     console.groupEnd();
   }, [filteredTopUnits, enableDrilldown, startAtDrillLevel, shouldShowAllCommunes, drillMap]);
+
+  // ── Auto-drill từ adhoc/extra filter (full map vẫn hiện, không thu hẹp filteredTopUnits) ──
+  useEffect(() => {
+    if (!enableDrilldown || startAtDrillLevel || shouldShowAllCommunes) return;
+    if (filteredTopUnits.length === 1) return; // native filter đã xử lý
+    if (Object.keys(drillMap).length === 0) return;
+
+    const matched = topUnits.filter(u =>
+      adhocProvinceCodes.includes(u.code) || adhocProvinceCodes.includes(u.id) ||
+      adhocProvinceNames.includes(u.name),
+    );
+
+    if (matched.length === 1) {
+      const province = matched[0];
+      const drillUnits = drillMap[province.id] ?? drillMap[province.code] ?? [];
+      if (province.id !== lastAutodrillRef.current && drillUnits.length) {
+        const effectiveDrillId = drillMap[province.id]?.length ? province.id : province.code;
+        lastAutodrillRef.current = province.id;
+        setDrillId(effectiveDrillId);
+        setDrillCode(province.code);
+        setDrillName(province.name);
+      }
+    } else if (matched.length !== 1 && lastAutodrillRef.current !== null) {
+      lastAutodrillRef.current = null;
+      setDrillId(null);
+      setDrillCode(null);
+      setDrillName('');
+    }
+  }, [adhocProvinceCodes, adhocProvinceNames, topUnits, drillMap,
+      filteredTopUnits.length, enableDrilldown, startAtDrillLevel, shouldShowAllCommunes]);
 
   // ── Timelapse: auto-advance khi đang play ─────────────────────────────────
   useEffect(() => {
@@ -799,9 +836,12 @@ const EcdsRegionMap: React.FC<EcdsRegionMapProps> = ({
               : startAtDrillLevel && u.parentId
                 ? (tlByCode[idToProvinceCode[u.parentId] ?? ''] ?? tlByCode[u.parentId])
                 : undefined),
+        values: drillId
+          ? (allMetricsByDrillCode[u.code] ?? allMetricsByDrillCode[u.id] ?? {})
+          : (allMetricsByCode[u.code] ?? allMetricsByCode[u.id] ?? {}),
       });
     },
-    [activeMetric, drillId, drillCode, startAtDrillLevel, idToProvinceCode, tlByCode],
+    [activeMetric, drillId, drillCode, startAtDrillLevel, idToProvinceCode, tlByCode, allMetricsByCode, allMetricsByDrillCode],
   );
 
   const handleMouseLeave = useCallback(() => {
@@ -932,7 +972,9 @@ const EcdsRegionMap: React.FC<EcdsRegionMapProps> = ({
             {tooltip.name}
             <span style={{ opacity: 0.55, fontWeight: 400, fontSize: 11 }}> ({tooltip.code})</span>
           </div>
-          <div>{metricName}: <b>{fmtNum(tooltip.value)}</b></div>
+          {metricNames.map(name => (
+            <div key={name}>{name}: <b>{tooltip.values[name] != null ? fmtNum(tooltip.values[name]) : '—'}</b></div>
+          ))}
           {enableDrilldown && !drillId && !startAtDrillLevel && !shouldShowAllCommunes && tooltip && (drillMap[tooltip.code]?.length || drillMap[tooltip.id ?? '']?.length) && (
             <div style={{ marginTop: 4, opacity: 0.6, fontStyle: 'italic', fontSize: 11 }}>
               Click để xem xã / phường
@@ -942,7 +984,7 @@ const EcdsRegionMap: React.FC<EcdsRegionMapProps> = ({
       )}
 
       {/* ── Floating back button (drill mode) ── */}
-      {drillId && (
+      {drillId && filteredTopUnits.length > 1 && (
         <button
           onClick={() => {
         // Lưu drillId hiện tại vào ref để commune auto-drill biết không cần re-drill
