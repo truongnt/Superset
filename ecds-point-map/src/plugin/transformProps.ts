@@ -101,23 +101,15 @@ export default function transformProps(chartProps: EcdsPointMapChartProps): Ecds
   const queriedProvinceNames           = getNativeFilterValues(fd, regionNameCol);
   const queriedCommuneCodesVal         = getNativeFilterValues(fd, regionDrillIdCol);
 
-  // hasExplicitGeoFilter = true chỉ khi có filter nhắm đúng cột tỉnh hoặc xã
-  const hasExplicitGeoFilter = (
-    queriedProvinceCodesFromFilter.length > 0 ||
-    queriedProvinceNames.length > 0 ||
-    queriedCommuneCodesVal.length > 0
-  );
+  // Mã tỉnh từ data rows — luôn extract, không gate bởi hasExplicitGeoFilter.
+  // RLS hoạt động im lặng ở DB: không có geo filter trong formData nhưng data đã bị thu hẹp.
+  const queriedProvinceCodesFromData = Array.from(queriedProvinceSet);
 
-  // Mã tỉnh từ data rows — chỉ dùng khi có geo filter rõ ràng
-  const queriedProvinceCodesFromData = hasExplicitGeoFilter ? Array.from(queriedProvinceSet) : [];
-
-  // queriedProvinceCodes → filter bản đồ nền: chỉ populated khi có geo filter
-  const queriedProvinceCodes = hasExplicitGeoFilter
-    ? [...new Set([
-        ...queriedProvinceCodesFromData,
-        ...queriedProvinceCodesFromFilter,
-      ])]
-    : [];
+  // queriedProvinceCodes → filter bản đồ nền: luôn include data-derived codes (cover RLS)
+  const queriedProvinceCodes = [...new Set([
+    ...queriedProvinceCodesFromData,
+    ...queriedProvinceCodesFromFilter,
+  ])];
 
   // ── Gom nhóm rows theo (lat, lng) ──────────────────────────────────────────
   const pointAccum = new Map<string, {

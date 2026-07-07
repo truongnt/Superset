@@ -231,28 +231,18 @@ export default function transformProps(chartProps: EcdsRegionMapChartProps): Ecd
   const adhocProvinceCodes = getAdhocFilterValues(fd, regionIdCol);
   const adhocProvinceNames = getAdhocFilterValues(fd, regionNameCol);
 
-  // hasExplicitGeoFilter = true chỉ khi có filter nhắm đúng cột tỉnh hoặc xã
-  const hasExplicitGeoFilter = (
-    queriedProvinceCodesFromFilter.length > 0 ||
-    queriedProvinceNames.length > 0 ||
-    queriedCommuneCodes.length > 0 ||
-    queriedCommuneNames.length > 0
-  );
-
-  // Mã tỉnh từ data rows — chỉ dùng khi có geo filter rõ ràng
-  // (data rows đã bị SQL filter bởi tất cả native filter, kể cả bệnh)
-  const queriedProvinceCodesFromData = hasExplicitGeoFilter ? Array.from(queriedProvinceSet) : [];
+  // Mã tỉnh từ data rows — luôn extract, không gate bởi hasExplicitGeoFilter.
+  // RLS hoạt động im lặng ở DB: không có geo filter trong formData nhưng data đã bị thu hẹp.
+  const queriedProvinceCodesFromData = Array.from(queriedProvinceSet);
 
   // isAnyRegionFilter giữ lại cho debug log
   const isAnyRegionFilter = hasAnyValueFilter(fd);
 
-  // queriedProvinceCodes → filter bản đồ nền: chỉ populated khi có geo filter
-  const queriedProvinceCodes = hasExplicitGeoFilter
-    ? [...new Set([
-        ...queriedProvinceCodesFromData,
-        ...queriedProvinceCodesFromFilter,
-      ])]
-    : [];
+  // queriedProvinceCodes → filter bản đồ nền: luôn include data-derived codes (cover RLS)
+  const queriedProvinceCodes = [...new Set([
+    ...queriedProvinceCodesFromData,
+    ...queriedProvinceCodesFromFilter,
+  ])];
 
   // ── DEBUG ─────────────────────────────────────────────────────────────────
   console.group('[ECDS Map] transformProps');

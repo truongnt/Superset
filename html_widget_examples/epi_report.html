@@ -1,0 +1,661 @@
+<style>
+html, body { margin: 0; padding: 0; overflow: hidden; }
+.host { display: flex; flex-direction: column; width: 100%; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; }
+
+/* ── Filter panel ── */
+.filter-panel {
+  flex-shrink: 0; background: #f6f8fa; border-bottom: 2px solid #d0d7de;
+  padding: 7px 10px; display: flex; flex-direction: column; gap: 6px;
+}
+.filter-section {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  padding-bottom: 5px; border-bottom: 1px solid #e2e8f0;
+}
+.filter-section:last-child { border-bottom: none; padding-bottom: 0; }
+.filter-section-title {
+  font-size: 10px; font-weight: 700; color: #4276A4; text-transform: uppercase;
+  letter-spacing: .4px; white-space: nowrap; min-width: 50px;
+}
+.filter-group { display: flex; align-items: center; gap: 5px; }
+.filter-label { font-size: 11px; color: #555; white-space: nowrap; font-weight: 500; }
+.filter-panel select, .filter-panel input[type="date"] {
+  padding: 2px 6px; border: 1px solid #bbb; border-radius: 4px;
+  font-size: 12px; color: #333; background: #fff; height: 26px;
+  font-family: inherit;
+}
+.filter-panel select:focus, .filter-panel input:focus { outline: none; border-color: #4276A4; }
+.filter-panel select.active, .filter-panel input.active { border-color: #1a73e8; background: #e8f0fe; }
+.sep { color: #888; font-size: 11px; }
+
+/* ── Multi-select ── */
+.ms-wrap { position: relative; display: inline-block; }
+.ms-btn {
+  padding: 0 8px; border: 1px solid #bbb; border-radius: 4px;
+  font-size: 12px; color: #333; background: #fff; height: 26px;
+  font-family: inherit; cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 4px; min-width: 150px;
+}
+.ms-btn .ms-text { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.ms-btn .ms-arrow { opacity: .5; font-size: 10px; flex-shrink: 0; }
+.ms-btn.active { border-color: #1a73e8; background: #e8f0fe; color: #1a73e8; font-weight: 500; }
+.ms-list {
+  position: absolute; top: calc(100% + 2px); left: 0; z-index: 200;
+  background: #fff; border: 1px solid #bbb; border-radius: 4px;
+  box-shadow: 0 3px 10px rgba(0,0,0,.15);
+  max-height: 220px; overflow-y: auto; min-width: 100%; width: max-content;
+  padding: 3px 0; display: none;
+}
+.ms-list.open { display: block; }
+.ms-item {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 10px; cursor: pointer; font-size: 12px; user-select: none;
+}
+.ms-item:hover { background: #f1f5f9; }
+.ms-item.checked { background: #dbeafe; color: #1d4ed8; font-weight: 500; }
+.ms-item input[type="checkbox"] { accent-color: #1a73e8; cursor: pointer; }
+
+.btn-reset {
+  padding: 2px 10px; border: 1px solid #bbb; border-radius: 4px;
+  background: #fff; cursor: pointer; font-size: 11px; color: #555; height: 26px;
+  font-family: inherit; margin-left: auto;
+}
+.btn-reset:hover { background: #fee2e2; border-color: #f87171; color: #b91c1c; }
+
+/* ── Table ── */
+.wrap { flex: 1; overflow: auto; border: 1px solid #d0d7de; }
+.xn-tbl {
+  width: max-content; min-width: 100%;
+  border-collapse: separate; border-spacing: 0;
+  font-size: 13px;
+}
+.xn-tbl th, .xn-tbl td {
+  border-right: 1px solid #d0d7de; border-bottom: 1px solid #d0d7de;
+  padding: 6px 8px; text-align: center; vertical-align: middle; background: #fff;
+  white-space: nowrap;
+}
+.xn-tbl thead th {
+  position: sticky; top: 0;
+  background: #4276A4; color: #fff; font-weight: 600; z-index: 5; background-clip: padding-box;
+}
+.xn-tbl td.dia-phuong {
+  text-align: left; font-weight: 600;
+  background: #eef5fb; border-right: 2px solid #4276A4;
+  position: sticky; left: 0; z-index: 2; cursor: pointer; user-select: none;
+}
+.xn-tbl td.dia-phuong:hover { background: #d8ebf7; }
+.xn-tbl td.xa-name {
+  text-align: left; background: #f8fbff; border-right: 2px solid #4276A4;
+  padding-left: 28px; position: sticky; left: 0; z-index: 2;
+}
+.xn-tbl tr.xa-row td { background: #f8fbff; }
+.xn-tbl tr.grand-total td { background: #fff4d6; font-weight: bold; color: #5a4500; border-bottom: 2px solid #d39c00; }
+.xn-tbl tr.grand-total td.dia-phuong { background: #fff4d6; border-right: 2px solid #d39c00; cursor: default; }
+.xn-tbl td.num { font-variant-numeric: tabular-nums; min-width: 70px; }
+.xn-tbl tbody tr:not(.grand-total):not(.xa-row):hover td { background: #e6f2ff !important; }
+.xn-tbl tbody tr:not(.grand-total):not(.xa-row):hover td.dia-phuong { background: #cce5f5 !important; }
+.xn-tbl tbody tr.xa-row:hover td { background: #e6f2ff !important; }
+.xn-tbl thead th.sortable { cursor: pointer; user-select: none; }
+.xn-tbl thead th.sortable:hover { filter: brightness(1.2); }
+.sort-icon { font-size: 9px; margin-left: 3px; opacity: .7; }
+.expand-icon { display: inline-block; width: 16px; font-size: 10px; transition: transform .15s; }
+.expanded .expand-icon { transform: rotate(90deg); }
+
+/* ── Footer ── */
+.footer {
+  flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px; border-top: 1px solid #d0d7de; background: #f6f8fa;
+  font-size: 11px; color: #666;
+}
+.btn-export {
+  padding: 3px 10px; border: none; border-radius: 4px;
+  background: #217346; color: #fff; cursor: pointer;
+  font-size: 11px; font-weight: 600; font-family: inherit;
+}
+.btn-export:hover { background: #185c38; }
+.stat-badge { padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 700; background: #dbeafe; color: #1d4ed8; }
+.note { font-size: 10px; color: #92400e; background: #fef3c7; padding: 3px 8px; border-radius: 3px; flex-shrink: 0; }
+</style>
+
+<div class="host">
+  <!-- Filter panel -->
+  <div class="filter-panel">
+
+    <!-- Nhóm 1: Trạng thái & Tiêu chí -->
+    <div class="filter-section">
+      <span class="filter-section-title">Phân loại</span>
+      <div class="filter-group">
+        <span class="filter-label">Trạng thái xác nhận:</span>
+        <div class="ms-wrap" id="ms-xacnhan">
+          <button class="ms-btn" type="button" style="min-width:190px">
+            <span class="ms-text">Tất cả</span><span class="ms-arrow">▾</span>
+          </button>
+          <div class="ms-list" id="ms-xacnhan-list"></div>
+        </div>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Tiêu chí thống kê:</span>
+        <select id="f-criteria" style="min-width:170px;height:26px;padding:0 6px;border:1px solid #bbb;border-radius:4px;font-size:12px;font-family:inherit">
+          <option value="0">Tình trạng hiện nay</option>
+          <option value="1">Giới tính</option>
+          <option value="2">Nhóm tuổi</option>
+          <option value="3">Phân loại chẩn đoán</option>
+          <option value="4">Nghề nghiệp</option>
+          <option value="5">Loại xét nghiệm</option>
+          <option value="6">Kết quả xét nghiệm</option>
+          <option value="7">Sử dụng vắc xin</option>
+        </select>
+      </div>
+      <button class="btn-reset" id="btn-reset">↺ Xóa bộ lọc</button>
+    </div>
+
+    <!-- Nhóm 3: Khoảng thời gian -->
+    <div class="filter-section">
+      <span class="filter-section-title">Thời gian</span>
+      <div class="filter-group">
+        <span class="filter-label">Ngày tạo:</span>
+        <input type="date" id="f-tao-from">
+        <span class="sep">đến</span>
+        <input type="date" id="f-tao-to">
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Ngày khởi phát / Nhập viện:</span>
+        <input type="date" id="f-kp-from">
+        <span class="sep">đến</span>
+        <input type="date" id="f-kp-to">
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Ngày sinh:</span>
+        <input type="date" id="f-ns-from">
+        <span class="sep">đến</span>
+        <input type="date" id="f-ns-to">
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Table -->
+  <div class="wrap">
+    <table class="xn-tbl" id="xn-table"></table>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <button class="btn-export" id="btn-export">⬇ Excel</button>
+    <span id="stat-text"></span>
+    <span class="note">⚠️ Bảng thống kê tối đa 50.000 dòng. Nếu dữ liệu nhiều hơn, số liệu sẽ bị thiếu — vui lòng lọc theo thời gian, tỉnh, xã, loại bệnh hoặc các tiêu chí khác để xem đầy đủ.</span>
+  </div>
+</div>
+
+<script>
+// Ẩn header Superset khi embedded (giữ filter bar để dùng native filter)
+(function () {
+  var CSS_HIDE = '.dashboard-header-container{display:none!important}';
+
+  function hideUI() {
+    try {
+      var pd = window.parent.document;
+      if (!pd || !pd.head) return;
+      if (!pd.getElementById('ecds-hide-ui')) {
+        var s = pd.createElement('style'); s.id = 'ecds-hide-ui'; s.textContent = CSS_HIDE;
+        pd.head.appendChild(s);
+      }
+      pd.querySelectorAll('.dashboard-header-container').forEach(function(el) {
+        el.style.setProperty('display','none','important');
+      });
+    } catch(e) {}
+  }
+
+  function setupHide() {
+    try {
+      if (!window.parent.document.head) return;
+      var isEmbedded = window.parent.location.pathname.indexOf('/embedded/') >= 0;
+      if (!isEmbedded) return;
+      hideUI();
+      var t = setInterval(hideUI, 500);
+      setTimeout(function(){ clearInterval(t); }, 8000);
+    } catch(e) {}
+  }
+  document.readyState === 'loading'
+    ? document.addEventListener('DOMContentLoaded', setupHide)
+    : setupHide();
+})();
+
+(function () {
+  // ── Tên cột dataset — chỉnh nếu khác ────────────────────────────────────────
+  var C = {
+    tinh:       'ten_tinh',
+    xa:         'ten_xa',
+    benh:       'ten_benh',
+    xacNhan:    'ten_trang_thai_phan_hoi',
+    ngayTao:    'ngay_tao',
+    ngayKP:     'ngay_khoi_phat',
+    ngayNV:     'ngay_nhap_vien',
+    ngaySinh:   'ngay_sinh',
+    tinhTrang:  'ten_tinh_trang_hien_nay',
+    gioiTinh:   'ten_gioi_tinh',
+    nhomTuoi:   'nhom_tuoi',
+    phanLoai:   'phan_loai_chan_doan',
+    loaiXN:     'loai_xet_nghiem',
+    ketQuaXN:   'ket_qua_xet_nghiem',
+    vacXin:     'su_dung_vac_xin',
+    ngheNghiep: 'ten_nghe',
+  };
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  var CRITERIA = [
+    { label: 'Tình trạng hiện nay', col: C.tinhTrang },
+    { label: 'Giới tính',                col: C.gioiTinh   },
+    { label: 'Nhóm tuổi',                col: C.nhomTuoi   },
+    { label: 'Phân loại chẩn đoán',      col: C.phanLoai   },
+    { label: 'Nghề nghiệp',              col: C.ngheNghiep },
+    { label: 'Loại xét nghiệm',          col: C.loaiXN     },
+    { label: 'Kết quả xét nghiệm',       col: C.ketQuaXN   },
+    { label: 'Sử dụng vắc xin',          col: C.vacXin     },
+  ];
+
+  var data = window.__chartData || window.DATA || [];
+  var tbl  = document.getElementById('xn-table');
+  var fmt  = function(n){ return (+n||0).toLocaleString('vi-VN'); };
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  function toMs(v) {
+    if (!v) return null;
+    var n = +v;
+    if (!isNaN(n) && n > 1e10) return n;
+    if (!isNaN(n) && n > 1e7)  return n * 1000;
+    var d = new Date(v);
+    return isNaN(d.getTime()) ? null : d.getTime();
+  }
+
+  function inRange(val, from, to) {
+    if (!from && !to) return true;
+    var t = toMs(val);
+    if (t === null) return true;
+    if (from && t < new Date(from).getTime()) return false;
+    if (to   && t > new Date(to + 'T23:59:59').getTime()) return false;
+    return true;
+  }
+
+  // ── Multi-select (chỉ dùng cho Xác nhận) ────────────────────────────────────
+  function MultiSelect(wrapId, listId, placeholder, onChange) {
+    var wrap = document.getElementById(wrapId);
+    var btn  = wrap.querySelector('.ms-btn');
+    var text = btn.querySelector('.ms-text');
+    var list = document.getElementById(listId);
+    var selected = [];
+    var selectAllEl = null;
+
+    function regularItems() {
+      return list.querySelectorAll('.ms-item:not(.ms-select-all)');
+    }
+
+    function syncSelectAll() {
+      if (!selectAllEl) return;
+      var total = regularItems().length;
+      var cb = selectAllEl.querySelector('input');
+      var allChecked = total > 0 && selected.length === total;
+      cb.checked = allChecked;
+      if (allChecked) selectAllEl.classList.add('checked');
+      else selectAllEl.classList.remove('checked');
+    }
+
+    function addItem(val, label) {
+      var item = document.createElement('div');
+      item.className = 'ms-item'; item.dataset.val = val;
+      var cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = val;
+      item.appendChild(cb);
+      item.appendChild(document.createTextNode(' ' + (label || val)));
+      item.addEventListener('click', function(e) {
+        if (e.target !== cb) cb.checked = !cb.checked;
+        var v = item.dataset.val;
+        if (cb.checked) { if (selected.indexOf(v) < 0) selected.push(v); item.classList.add('checked'); }
+        else { selected = selected.filter(function(s){ return s !== v; }); item.classList.remove('checked'); }
+        syncSelectAll(); updateBtn(); onChange();
+      });
+      list.appendChild(item);
+    }
+
+    function updateBtn() {
+      if (!selected.length) { text.textContent = placeholder; btn.classList.remove('active'); }
+      else {
+        var d = selected.slice(0,2).join(', ');
+        if (selected.length > 2) d += ' (+' + (selected.length-2) + ')';
+        text.textContent = d; btn.classList.add('active');
+      }
+    }
+
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      document.querySelectorAll('.ms-list.open').forEach(function(l){ if (l !== list) l.classList.remove('open'); });
+      list.classList.toggle('open');
+    });
+
+    return {
+      addItem: addItem,
+      addSelectAll: function(label) {
+        var item = document.createElement('div');
+        item.className = 'ms-item ms-select-all';
+        item.style.borderBottom = '1px solid #e2e8f0';
+        item.style.fontWeight = '600';
+        var cb = document.createElement('input'); cb.type = 'checkbox';
+        item.appendChild(cb);
+        item.appendChild(document.createTextNode(' ' + (label || 'Chọn tất cả')));
+        item.addEventListener('click', function(e) {
+          if (e.target !== cb) cb.checked = !cb.checked;
+          selected = [];
+          regularItems().forEach(function(it) {
+            it.querySelector('input').checked = cb.checked;
+            if (cb.checked) { selected.push(it.dataset.val); it.classList.add('checked'); }
+            else { it.classList.remove('checked'); }
+          });
+          if (cb.checked) item.classList.add('checked'); else item.classList.remove('checked');
+          updateBtn(); onChange();
+        });
+        list.insertBefore(item, list.firstChild);
+        selectAllEl = item;
+      },
+      getSelected: function() { return selected.slice(); },
+      reset: function() {
+        selected = [];
+        list.querySelectorAll('.ms-item').forEach(function(item) {
+          item.classList.remove('checked');
+          item.querySelector('input').checked = false;
+        });
+        updateBtn();
+      },
+    };
+  }
+
+  document.addEventListener('click', function() {
+    document.querySelectorAll('.ms-list.open').forEach(function(l){ l.classList.remove('open'); });
+  });
+
+  var fCrit     = document.getElementById('f-criteria');
+  var msXacNhan = MultiSelect('ms-xacnhan','ms-xacnhan-list','Tất cả', rebuild);
+
+  // Populate xacNhan options từ data thực — dùng '' để đại diện null/rỗng
+  var xacNhanVals = [];
+  data.forEach(function(r) {
+    var raw = r[C.xacNhan];
+    var v = (raw != null && String(raw).trim() !== '') ? String(raw).trim() : '';
+    if (xacNhanVals.indexOf(v) < 0) xacNhanVals.push(v);
+  });
+  // Sort: giá trị rỗng lên cuối
+  xacNhanVals.sort(function(a, b) {
+    if (a === '') return 1;
+    if (b === '') return -1;
+    return a.localeCompare(b, 'vi');
+  });
+  xacNhanVals.forEach(function(v) { msXacNhan.addItem(v, v || '(Chưa xác nhận)'); });
+  if (xacNhanVals.length > 1) msXacNhan.addSelectAll('Tất cả');
+
+  // ── Filters ──────────────────────────────────────────────────────────────────
+  function getFilters() {
+    return {
+      xacNhan: msXacNhan.getSelected(),
+      taoFrom: document.getElementById('f-tao-from').value,
+      taoTo:   document.getElementById('f-tao-to').value,
+      kpFrom:  document.getElementById('f-kp-from').value,
+      kpTo:    document.getElementById('f-kp-to').value,
+      nsFrom:  document.getElementById('f-ns-from').value,
+      nsTo:    document.getElementById('f-ns-to').value,
+    };
+  }
+
+  function hasFilter(f) {
+    return f.xacNhan.length || f.taoFrom || f.taoTo || f.kpFrom || f.kpTo || f.nsFrom || f.nsTo;
+  }
+
+  function applyFilters(f) {
+    return data.filter(function(r) {
+      if (f.xacNhan.length) {
+        var xnVal = (r[C.xacNhan] != null && String(r[C.xacNhan]).trim() !== '') ? String(r[C.xacNhan]).trim() : '';
+        if (f.xacNhan.indexOf(xnVal) < 0) return false;
+      }
+      if (!inRange(r[C.ngayTao],  f.taoFrom, f.taoTo)) return false;
+      var kp = r[C.ngayKP] || r[C.ngayNV];
+      if (!inRange(kp, f.kpFrom, f.kpTo)) return false;
+      if (!inRange(r[C.ngaySinh], f.nsFrom, f.nsTo)) return false;
+      return true;
+    });
+  }
+
+  // ── Build state từ filtered rows ─────────────────────────────────────────────
+  var _state   = null;
+  var sortCol  = null;
+  var sortAsc  = false;
+
+  function buildState(rows, critIdx) {
+    var crit   = CRITERIA[+critIdx];
+    var byTinh = {}, xOrder = {}, valSet = [];
+
+    rows.forEach(function(r) {
+      var t = r[C.tinh] || '(?)';
+      var x = r[C.xa]   || '';
+      var v = r[crit.col] != null ? String(r[crit.col]) : '(chưa có)';
+
+      if (!byTinh[t]) { byTinh[t] = { vals: {}, xas: {} }; xOrder[t] = []; }
+      if (x && !byTinh[t].xas[x]) { byTinh[t].xas[x] = {}; xOrder[t].push(x); }
+      if (valSet.indexOf(v) < 0) valSet.push(v);
+
+      byTinh[t].vals[v] = (byTinh[t].vals[v] || 0) + 1;
+      if (x) byTinh[t].xas[x][v] = (byTinh[t].xas[x][v] || 0) + 1;
+    });
+
+    // Nhóm tuổi sort đúng thứ tự, còn lại sort A-Z
+    var AGE_ORDER = ['< 1 tuổi','1 - 4 tuổi','5 - 14 tuổi','15 - 24 tuổi','25 - 44 tuổi','45 - 59 tuổi','>= 60 tuổi','Không xác định'];
+    valSet.sort(function(a, b) {
+      var ia = AGE_ORDER.indexOf(a), ib = AGE_ORDER.indexOf(b);
+      if (ia >= 0 && ib >= 0) return ia - ib;
+      if (ia >= 0) return -1;
+      if (ib >= 0) return 1;
+      return a.localeCompare(b, 'vi');
+    });
+    var tinhs = Object.keys(byTinh).sort();
+    var grand = {};
+    valSet.forEach(function(v) {
+      grand[v] = 0;
+      tinhs.forEach(function(t) { grand[v] += byTinh[t].vals[v] || 0; });
+    });
+
+    return { byTinh: byTinh, xOrder: xOrder, tinhs: tinhs, valSet: valSet, grand: grand };
+  }
+
+  function getSortedTinh() {
+    var keys = _state.tinhs.slice();
+    if (!sortCol) return keys;
+    return keys.sort(function(a, b) {
+      var getSum = function(o) {
+        if (sortCol === '__tong__') {
+          return Object.values(o.vals).reduce(function(s, n){ return s + n; }, 0);
+        }
+        return o.vals[sortCol] || 0;
+      };
+      var va = getSum(_state.byTinh[a]), vb = getSum(_state.byTinh[b]);
+      return sortAsc ? va - vb : vb - va;
+    });
+  }
+
+  function numCells(valsMap) {
+    var tong = 0;
+    _state.valSet.forEach(function(v){ tong += valsMap[v] || 0; });
+    var cells = '<td class="num">' + fmt(tong) + '</td>';
+    _state.valSet.forEach(function(v){
+      cells += '<td class="num">' + fmt(valsMap[v] || 0) + '</td>';
+    });
+    return cells;
+  }
+
+  // ── Build table ──────────────────────────────────────────────────────────────
+  function buildTable() {
+    if (_state.tinhs.length === 0) {
+      tbl.innerHTML =
+        '<thead><tr><th style="background:#4276A4;color:#fff;padding:8px 12px">Địa phương</th></tr></thead>' +
+        '<tbody><tr><td style="text-align:center;padding:32px;color:#888;font-size:13px">' +
+        '⚠️ Không có dữ liệu nào thỏa mãn điều kiện lọc. Vui lòng thay đổi bộ lọc.' +
+        '</td></tr></tbody>';
+      return;
+    }
+    var icon0 = (sortCol === '__tong__') ? (sortAsc ? ' ▲' : ' ▼') : ' ⇅';
+    var head = '<thead><tr>' +
+      '<th style="text-align:left;min-width:160px;position:sticky;left:0;z-index:10;background:#4276A4">Địa phương</th>' +
+      '<th class="sortable" data-col="__tong__">Tổng<span class="sort-icon">' + icon0 + '</span></th>';
+
+    _state.valSet.forEach(function(v) {
+      var icon = (sortCol === v) ? (sortAsc ? ' ▲' : ' ▼') : ' ⇅';
+      head += '<th class="sortable" data-col="' + v.replace(/"/g,'') + '">' + v +
+              '<span class="sort-icon">' + icon + '</span></th>';
+    });
+    head += '</tr></thead>';
+
+    var grandTong = 0;
+    _state.valSet.forEach(function(v){ grandTong += _state.grand[v] || 0; });
+    var body = '<tbody><tr class="grand-total">' +
+      '<td class="dia-phuong">Tổng cộng</td>' +
+      '<td class="num">' + fmt(grandTong) + '</td>';
+    _state.valSet.forEach(function(v){
+      body += '<td class="num">' + fmt(_state.grand[v] || 0) + '</td>';
+    });
+    body += '</tr>';
+
+    getSortedTinh().forEach(function(t, idx) {
+      var tinhId = 'tinh-' + idx;
+      body += '<tr class="tinh-row" data-id="' + tinhId + '">' +
+        '<td class="dia-phuong"><span class="expand-icon">▶</span>' + t + '</td>' +
+        numCells(_state.byTinh[t].vals) + '</tr>';
+      (_state.xOrder[t] || []).slice().sort().forEach(function(x) {
+        body += '<tr class="xa-row" data-tinh="' + tinhId + '" style="display:none">' +
+          '<td class="xa-name">' + x + '</td>' +
+          numCells(_state.byTinh[t].xas[x]) + '</tr>';
+      });
+    });
+    body += '</tbody>';
+    tbl.innerHTML = head + body;
+
+    // Sticky header top
+    var offset = 0;
+    tbl.querySelectorAll('thead tr').forEach(function(row) {
+      row.querySelectorAll('th').forEach(function(th){ th.style.top = offset + 'px'; });
+      offset += row.offsetHeight;
+    });
+
+    // Expand/collapse
+    tbl.querySelectorAll('.tinh-row').forEach(function(row) {
+      row.addEventListener('click', function() {
+        var id = this.dataset.id;
+        var expanded = this.classList.toggle('expanded');
+        tbl.querySelectorAll('.xa-row[data-tinh="' + id + '"]').forEach(function(r) {
+          r.style.display = expanded ? 'table-row' : 'none';
+        });
+      });
+    });
+
+    // Sort
+    tbl.querySelectorAll('thead th.sortable').forEach(function(th) {
+      th.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var col = th.dataset.col;
+        if (sortCol === col) { sortAsc = !sortAsc; } else { sortCol = col; sortAsc = false; }
+        buildTable();
+      });
+    });
+  }
+
+  // ── Rebuild (filter → state → table) ─────────────────────────────────────────
+  function rebuild() {
+    var f = getFilters();
+
+    // Date inputs highlight
+    ['f-tao-from','f-tao-to','f-kp-from','f-kp-to','f-ns-from','f-ns-to'].forEach(function(id) {
+      var el = document.getElementById(id);
+      el.classList.toggle('active', !!el.value);
+    });
+
+    var filtered = applyFilters(f);
+    _state = buildState(filtered, fCrit.value);
+    sortCol = null; sortAsc = false;
+    buildTable();
+
+    var stat = document.getElementById('stat-text');
+    stat.innerHTML = '<span class="stat-badge">' + filtered.length.toLocaleString('vi-VN') + '</span> ca' +
+      (hasFilter(f) ? ' / tổng ' + data.length.toLocaleString('vi-VN') : '');
+  }
+
+  document.getElementById('btn-reset').addEventListener('click', function() {
+    msXacNhan.reset();
+    ['f-tao-from','f-tao-to','f-kp-from','f-kp-to','f-ns-from','f-ns-to'].forEach(function(id) {
+      document.getElementById(id).value = '';
+    });
+    rebuild();
+  });
+
+  // ── Wire filter events ───────────────────────────────────────────────────────
+  fCrit.addEventListener('change', rebuild);
+
+  // Date range pairs — đến ngày luôn >= từ ngày
+  var datePairs = [
+    ['f-tao-from', 'f-tao-to'],
+    ['f-kp-from',  'f-kp-to'],
+    ['f-ns-from',  'f-ns-to'],
+  ];
+  datePairs.forEach(function(pair) {
+    var fromEl = document.getElementById(pair[0]);
+    var toEl   = document.getElementById(pair[1]);
+    fromEl.addEventListener('change', function() {
+      toEl.min = fromEl.value || '';
+      if (toEl.value && toEl.value < fromEl.value) toEl.value = fromEl.value;
+      rebuild();
+    });
+    toEl.addEventListener('change', function() {
+      fromEl.max = toEl.value || '';
+      if (fromEl.value && fromEl.value > toEl.value) fromEl.value = toEl.value;
+      rebuild();
+    });
+  });
+
+  // ── Export CSV ────────────────────────────────────────────────────────────────
+  document.getElementById('btn-export').addEventListener('click', function() {
+    if (!_state) return;
+    var hdr = ['Địa phương', 'Tổng'].concat(_state.valSet);
+    var rows = [hdr];
+
+    function csvRow(name, valsMap) {
+      var tong = 0; _state.valSet.forEach(function(v){ tong += valsMap[v]||0; });
+      return [name, tong].concat(_state.valSet.map(function(v){ return valsMap[v]||0; }));
+    }
+
+    var grandTong = 0; _state.valSet.forEach(function(v){ grandTong += _state.grand[v]||0; });
+    rows.push(['Tổng cộng', grandTong].concat(_state.valSet.map(function(v){ return _state.grand[v]||0; })));
+
+    getSortedTinh().forEach(function(t) {
+      rows.push(csvRow(t, _state.byTinh[t].vals));
+      (_state.xOrder[t]||[]).slice().sort().forEach(function(x) {
+        rows.push(csvRow('  ' + x, _state.byTinh[t].xas[x]));
+      });
+    });
+
+    var csv = rows.map(function(r) {
+      return r.map(function(v) {
+        var s = String(v == null ? '' : v);
+        return (s.indexOf(',') >= 0 || s.indexOf('"') >= 0) ? '"' + s.replace(/"/g,'""') + '"' : s;
+      }).join(',');
+    }).join('\r\n');
+
+    var blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a'); a.href = url; a.download = 'epi_report.csv';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  });
+
+  // ── Init ─────────────────────────────────────────────────────────────────────
+  function fitHost() {
+    var h = document.querySelector('.host');
+    if (h) h.style.height = (window.innerHeight || 500) + 'px';
+  }
+  fitHost();
+  window.addEventListener('resize', fitHost);
+
+  rebuild();
+})();
+</script>

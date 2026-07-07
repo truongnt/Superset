@@ -1,0 +1,455 @@
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f4f8; font-size: 13px; }
+
+.host { display: flex; flex-direction: column; width: 100%; height: 100%; }
+
+/* Toolbar */
+.toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 6px 10px; flex-shrink: 0;
+  background: #fff; border-bottom: 1px solid #d0d7de;
+}
+.toolbar label { font-size: 11px; color: #555; white-space: nowrap; }
+.toolbar input[type="text"] {
+  padding: 4px 8px; border: 1px solid #bbb; border-radius: 4px;
+  font-size: 12px; color: #333; background: #fff; width: 180px;
+}
+.toolbar input[type="text"]:focus { outline: none; border-color: #4276A4; }
+.toolbar select {
+  padding: 4px 8px; border: 1px solid #bbb; border-radius: 4px;
+  font-size: 12px; color: #333; background: #fff; cursor: pointer; max-width: 200px;
+}
+.toolbar select:focus { outline: none; border-color: #4276A4; }
+.toolbar-right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.btn {
+  padding: 4px 12px; border: none; border-radius: 4px;
+  cursor: pointer; font-size: 12px; font-weight: 600; line-height: 1.5;
+}
+.btn-excel { background: #217346; color: #fff; }
+.btn-excel:hover { background: #185c38; }
+.count-badge { font-size: 11px; color: #64748b; white-space: nowrap; }
+
+/* Table wrap */
+.tbl-wrap { flex: 1; overflow: auto; min-height: 0; }
+
+table {
+  width: max-content; min-width: 100%;
+  border-collapse: separate; border-spacing: 0;
+  font-size: 12px;
+}
+th, td {
+  border-right: 1px solid #d0d7de; border-bottom: 1px solid #d0d7de;
+  padding: 5px 8px; text-align: left; vertical-align: middle; white-space: nowrap;
+}
+thead th {
+  position: sticky; top: 0; background: #4276A4; color: #fff;
+  font-weight: 600; z-index: 5; background-clip: padding-box; cursor: pointer; user-select: none;
+}
+thead th:hover { filter: brightness(1.15); }
+.sort-icon { font-size: 9px; margin-left: 3px; opacity: .7; }
+
+td { background: #fff; }
+tbody tr:hover td { background: #eef5fb; }
+
+td.num { text-align: right; font-variant-numeric: tabular-nums; padding-right: 10px; }
+td.center { text-align: center; }
+
+/* Badges */
+.badge {
+  display: inline-block; padding: 2px 7px; border-radius: 10px;
+  font-size: 10px; font-weight: 600; white-space: nowrap;
+}
+.badge-success { background: #dcfce7; color: #166534; }
+.badge-warn    { background: #fef9c3; color: #854d0e; }
+.badge-danger  { background: #fee2e2; color: #991b1b; }
+.badge-blue    { background: #dbeafe; color: #1e40af; }
+
+/* Role pills */
+.role-list { display: flex; flex-wrap: wrap; gap: 3px; max-width: 280px; }
+.role-pill {
+  display: inline-block; padding: 1px 6px; border-radius: 8px;
+  font-size: 10px; font-weight: 500; background: #e0e7ff; color: #3730a3; white-space: nowrap;
+}
+
+/* Login note tooltip */
+.col-note { font-size: 9px; opacity: .65; display: block; font-weight: 400; }
+
+.empty-row td { text-align: center; color: #94a3b8; padding: 24px; }
+
+/* Chart */
+.chart-wrap { height: 280px; flex-shrink: 0; overflow-y: auto; overflow-x: hidden; padding: 12px 16px; background: #fff; border-top: 1px solid #d0d7de; }
+
+.chart-legend { display: flex; gap: 16px; margin-bottom: 12px; }
+.legend-item  { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #334155; }
+.legend-dot   { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
+.chart-row    { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.chart-label  { width: 180px; flex-shrink: 0; font-size: 11px; color: #334155;
+                text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chart-bar-wrap { flex: 1; height: 22px; background: #f1f5f9; border-radius: 3px; overflow: hidden;
+                  display: flex; position: relative; }
+.bar-seg      { height: 100%; transition: width .3s; }
+.bar-doi      { background: #22c55e; }
+.bar-chua     { background: #f59e0b; }
+.chart-count  { width: 60px; flex-shrink: 0; font-size: 11px; color: #64748b; text-align: right; }
+</style>
+
+<div class="host">
+  <div class="toolbar">
+    <label>Tìm kiếm:</label>
+    <input type="text" id="f-search" placeholder="Username hoặc email...">
+
+    <label>Tỉnh:</label>
+    <select id="f-tinh"><option value="">-- Tất cả --</option></select>
+
+    <label>Phân quyền:</label>
+    <select id="f-role"><option value="">-- Tất cả --</option></select>
+
+    <label>Đổi mật khẩu:</label>
+    <select id="f-mk">
+      <option value="">-- Tất cả --</option>
+      <option value="da">Đã đổi</option>
+      <option value="chua">Chưa đổi</option>
+    </select>
+
+    <label>Trạng thái:</label>
+    <select id="f-active">
+      <option value="">-- Tất cả --</option>
+      <option value="Hoạt động">Hoạt động</option>
+      <option value="Bị khóa">Bị khóa</option>
+      <option value="Vô hiệu hóa">Vô hiệu hóa</option>
+    </select>
+
+    <div class="toolbar-right">
+      <label>Hiển thị:</label>
+      <select id="f-limit">
+        <option value="500">500</option>
+        <option value="1000" selected>1 000</option>
+        <option value="2000">2 000</option>
+        <option value="0">Tất cả</option>
+      </select>
+      <span class="count-badge" id="count-badge"></span>
+      <button class="btn btn-excel" id="btn-export">⬇ Excel</button>
+    </div>
+  </div>
+
+  <div class="tbl-wrap">
+    <table id="main-table">
+      <thead>
+        <tr>
+          <th style="min-width:36px;text-align:center">#</th>
+          <th data-col="ten_tinh"       style="min-width:130px">Tỉnh<span class="sort-icon">⇅</span></th>
+          <th data-col="ten_don_vi"     style="min-width:180px">Đơn vị<span class="sort-icon">⇅</span></th>
+          <th data-col="username"       style="min-width:140px">Username<span class="sort-icon">⇅</span></th>
+          <th data-col="email"          style="min-width:180px">Email<span class="sort-icon">⇅</span></th>
+          <th data-col="so_dien_thoai" style="min-width:120px">Điện thoại<span class="sort-icon">⇅</span></th>
+          <th data-col="phan_quyen"     style="min-width:220px">Phân quyền</th>
+          <th data-col="so_thb"         style="min-width:80px;text-align:right">Số THB<span class="sort-icon">⇅</span></th>
+          <th data-col="so_lan_dang_nhap" style="min-width:90px;text-align:right">Số lần ĐN<span class="sort-icon">⇅</span></th>
+          <th data-col="da_doi_mk"      style="min-width:90px;text-align:center">Đổi MK<span class="sort-icon">⇅</span></th>
+          <th data-col="lan_cuoi_dn"    style="min-width:140px">Lần cuối ĐN<span class="sort-icon">⇅</span></th>
+          <th data-col="dang_hoat_dong" style="min-width:90px;text-align:center">Trạng thái<span class="sort-icon">⇅</span></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <div class="chart-wrap" id="chart-wrap"></div>
+</div>
+
+<script>
+(function () {
+  var raw = window.__chartData || window.DATA || [];
+
+  var C = {
+    username:    'username',
+    email:       'email',
+    tinh:        'ten_tinh',
+    donVi:       'ten_don_vi',
+    phanQuyen:   'phan_quyen',
+    soThb:       'so_thb',
+    soDangNhap:  'so_lan_dang_nhap',
+    phone:       'so_dien_thoai',
+    daDoi:       'da_doi_mk',       // string: 'Đã đổi' | 'Chưa đổi'
+    lanCuoi:     'lan_cuoi_dn',
+    trangThai:   'trang_thai',      // string: 'Hoạt động' | 'Bị khóa' | 'Vô hiệu hóa'
+  };
+
+  // Sortable numeric columns
+  var NUM_COLS = { so_thb: 1, so_lan_dang_nhap: 1 };
+
+  function fitHost() {
+    var h = document.querySelector('.host');
+    if (h) h.style.height = (window.innerHeight || 600) + 'px';
+  }
+  fitHost();
+  window.addEventListener('resize', fitHost);
+
+  // ── Populate dropdowns ─────────────────────────────────────────────────────
+  var tinhs = [], roles = [];
+  raw.forEach(function (r) {
+    var t = r[C.tinh] || '';
+    if (t && tinhs.indexOf(t) < 0) tinhs.push(t);
+    (r[C.phanQuyen] || '').split(';').forEach(function (p) {
+      p = p.trim();
+      if (p && roles.indexOf(p) < 0) roles.push(p);
+    });
+  });
+  tinhs.sort(); roles.sort();
+
+  var fTinh = document.getElementById('f-tinh');
+  var fRole = document.getElementById('f-role');
+  tinhs.forEach(function (t) {
+    var o = document.createElement('option'); o.value = t; o.textContent = t;
+    fTinh.appendChild(o);
+  });
+  roles.forEach(function (rn) {
+    var o = document.createElement('option'); o.value = rn; o.textContent = rn;
+    fRole.appendChild(o);
+  });
+
+  // ── Sort state ─────────────────────────────────────────────────────────────
+  var sortCol = 'ten_tinh', sortAsc = true;
+  var filtered = [];
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  function isDaDoi(r) {
+    return (r[C.daDoi] || '') === 'Đã đổi';
+  }
+
+  function getTrangThai(r) {
+    return r[C.trangThai] || 'Hoạt động';
+  }
+
+  function fmtDate(v) {
+    if (!v) return '—';
+    var d = typeof v === 'number' ? new Date(v) : new Date(v);
+    if (isNaN(d)) return String(v);
+    var dd = d.getDate(), mm = d.getMonth() + 1, yy = d.getFullYear();
+    var hh = d.getHours(), mi = d.getMinutes();
+    return pad(dd)+'/'+pad(mm)+'/'+yy+' '+pad(hh)+':'+pad(mi);
+  }
+  function pad(n) { return n < 10 ? '0'+n : n; }
+
+  function rolePills(str) {
+    if (!str) return '<span style="color:#94a3b8">—</span>';
+    var parts = str.split(';').map(function(s){ return s.trim(); }).filter(Boolean);
+    return '<div class="role-list">' + parts.map(function(p) {
+      return '<span class="role-pill">' + esc(p) + '</span>';
+    }).join('') + '</div>';
+  }
+
+  function esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function fmtNum(n) {
+    return n > 0
+      ? '<strong>' + n.toLocaleString('vi-VN') + '</strong>'
+      : '<span style="color:#94a3b8">0</span>';
+  }
+
+  // ── Filter ─────────────────────────────────────────────────────────────────
+  function getFiltered() {
+    var search = document.getElementById('f-search').value.trim().toLowerCase();
+    var tinh   = fTinh.value;
+    var role   = fRole.value;
+    var mk     = document.getElementById('f-mk').value;
+    var act    = document.getElementById('f-active').value;
+
+    return raw.filter(function (r) {
+      if (tinh && (r[C.tinh] || '') !== tinh) return false;
+      if (role && (r[C.phanQuyen] || '').indexOf(role) < 0) return false;
+      if (mk !== '') {
+        if (mk === 'da' && !isDaDoi(r)) return false;
+        if (mk === 'chua' && isDaDoi(r)) return false;
+      }
+      if (act !== '') {
+        if (getTrangThai(r) !== act) return false;
+      }
+      if (search) {
+        var u = (r[C.username] || '').toLowerCase();
+        var e = (r[C.email]    || '').toLowerCase();
+        if (u.indexOf(search) < 0 && e.indexOf(search) < 0) return false;
+      }
+      return true;
+    });
+  }
+
+  // ── Sort ───────────────────────────────────────────────────────────────────
+  function sortRows(rows) {
+    if (!sortCol) return rows;
+    return rows.slice().sort(function (a, b) {
+      var va = a[sortCol], vb = b[sortCol];
+      if (NUM_COLS[sortCol]) {
+        va = +(va || 0); vb = +(vb || 0);
+        return sortAsc ? va - vb : vb - va;
+      }
+      // datetime sort
+      if (sortCol === 'lan_cuoi_dn') {
+        va = va ? new Date(va).getTime() : 0;
+        vb = vb ? new Date(vb).getTime() : 0;
+        return sortAsc ? va - vb : vb - va;
+      }
+      va = (va || '').toString().toLowerCase();
+      vb = (vb || '').toString().toLowerCase();
+      if (va < vb) return sortAsc ? -1 : 1;
+      if (va > vb) return sortAsc ?  1 : -1;
+      return 0;
+    });
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  function render() {
+    filtered = sortRows(getFiltered());
+    var limit   = +document.getElementById('f-limit').value;
+    var display = (limit === 0 || limit >= filtered.length) ? filtered : filtered.slice(0, limit);
+
+    var badge = filtered.length.toLocaleString('vi-VN') + ' / ' + raw.length.toLocaleString('vi-VN') + ' tài khoản';
+    if (display.length < filtered.length)
+      badge += ' (hiển thị ' + display.length.toLocaleString('vi-VN') + ')';
+    document.getElementById('count-badge').textContent = badge;
+
+    var tbody = document.getElementById('tbody');
+    if (!display.length) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="12">Không có dữ liệu phù hợp</td></tr>';
+      return;
+    }
+
+    var html = '';
+    display.forEach(function (r, i) {
+      var dd      = isDaDoi(r);
+      var tt      = getTrangThai(r);
+      var ttClass = tt === 'Hoạt động' ? 'badge-blue' : tt === 'Bị khóa' ? 'badge-danger' : 'badge-gray';
+      var soThb   = +(r[C.soThb]      || 0);
+      var soDN    = +(r[C.soDangNhap] || 0);
+
+      html +=
+        '<tr>' +
+        '<td class="center" style="color:#94a3b8">' + (i + 1) + '</td>' +
+        '<td>' + esc(r[C.tinh]  || '—') + '</td>' +
+        '<td>' + esc(r[C.donVi] || '—') + '</td>' +
+        '<td><strong>' + esc(r[C.username] || '') + '</strong></td>' +
+        '<td style="color:#475569">' + esc(r[C.email] || '—') + '</td>' +
+        '<td style="color:#475569">' + esc(r[C.phone] || '—') + '</td>' +
+        '<td>' + rolePills(r[C.phanQuyen]) + '</td>' +
+        '<td class="num">' + fmtNum(soThb) + '</td>' +
+        '<td class="num">' + fmtNum(soDN)  + '</td>' +
+        '<td class="center"><span class="badge ' + (dd ? 'badge-success' : 'badge-warn') + '">' + (dd ? 'Đã đổi' : 'Chưa đổi') + '</span></td>' +
+        '<td style="color:#475569">' + fmtDate(r[C.lanCuoi]) + '</td>' +
+        '<td class="center"><span class="badge ' + ttClass + '">' + tt + '</span></td>' +
+        '</tr>';
+    });
+    tbody.innerHTML = html;
+    renderChart();
+  }
+
+  // ── Header sort ────────────────────────────────────────────────────────────
+  document.querySelector('#main-table thead').addEventListener('click', function (e) {
+    var th = e.target.closest('th[data-col]');
+    if (!th) return;
+    var col = th.dataset.col;
+    if (sortCol === col) sortAsc = !sortAsc;
+    else { sortCol = col; sortAsc = !NUM_COLS[col]; } // numeric default DESC
+    document.querySelectorAll('thead th .sort-icon').forEach(function(ic){ ic.textContent = '⇅'; });
+    var icon = th.querySelector('.sort-icon');
+    if (icon) icon.textContent = sortAsc ? '▲' : '▼';
+    render();
+  });
+
+  // ── Filter events ──────────────────────────────────────────────────────────
+  ['f-search','f-tinh','f-role','f-mk','f-active','f-limit'].forEach(function (id) {
+    document.getElementById(id).addEventListener(id === 'f-search' ? 'input' : 'change', render);
+  });
+
+  // ── Export CSV ─────────────────────────────────────────────────────────────
+  document.getElementById('btn-export').addEventListener('click', function () {
+    if (!filtered.length) return;
+    var hdrs = ['#','Tỉnh','Đơn vị','Username','Email','Điện thoại','Phân quyền',
+                'Số THB','Số lần ĐN','Đổi MK','Đăng nhập cuối','Trạng thái'];
+    var rows = [hdrs];
+    filtered.forEach(function (r, i) {
+      rows.push([
+        i + 1,
+        r[C.tinh]   || '',
+        r[C.donVi]  || '',
+        r[C.username] || '',
+        r[C.email]  || '',
+        r[C.phone]  || '',
+        (r[C.phanQuyen] || '').replace(/;/g, ' | '),
+        +(r[C.soThb]      || 0),
+        +(r[C.soDangNhap] || 0),
+        isDaDoi(r) ? 'Đã đổi' : 'Chưa đổi',
+        fmtDate(r[C.lanCuoi]),
+        getTrangThai(r),
+      ]);
+    });
+
+    var csv = rows.map(function (row) {
+      return row.map(function (v) {
+        var s = String(v == null ? '' : v);
+        return (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0)
+          ? '"' + s.replace(/"/g, '""') + '"' : s;
+      }).join(',');
+    }).join('\r\n');
+
+    var blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href = url; a.download = 'thong_ke_tai_khoan.csv';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  });
+
+  // ── Chart ──────────────────────────────────────────────────────────────────
+  function renderChart() {
+    var wrap = document.getElementById('chart-wrap');
+    // Gộp theo tỉnh từ toàn bộ raw (không theo filter)
+    var byTinh = {};
+    raw.forEach(function (r) {
+      var t  = r[C.tinh] || '(Không có tỉnh)';
+      var dd = isDaDoi(r);
+      if (!byTinh[t]) byTinh[t] = { doi: 0, chua: 0 };
+      if (dd) byTinh[t].doi++;
+      else    byTinh[t].chua++;
+    });
+
+    var items = Object.keys(byTinh).map(function (t) {
+      return { tinh: t, doi: byTinh[t].doi, chua: byTinh[t].chua,
+               tong: byTinh[t].doi + byTinh[t].chua };
+    });
+    items.sort(function (a, b) { return b.tong - a.tong; });
+
+    var max = items.reduce(function (m, it) { return Math.max(m, it.tong); }, 0) || 1;
+
+    var html =
+      '<div class="chart-legend">' +
+        '<div class="legend-item"><div class="legend-dot bar-doi"></div>Đã đổi mật khẩu</div>' +
+        '<div class="legend-item"><div class="legend-dot bar-chua"></div>Chưa đổi mật khẩu</div>' +
+      '</div>';
+
+    items.forEach(function (it) {
+      var pDoi  = (it.doi  / max * 100).toFixed(1);
+      var pChua = (it.chua / max * 100).toFixed(1);
+      html +=
+        '<div class="chart-row">' +
+          '<div class="chart-label" title="' + esc(it.tinh) + '">' + esc(it.tinh) + '</div>' +
+          '<div class="chart-bar-wrap">' +
+            '<div class="bar-seg bar-doi"  style="width:' + pDoi  + '%"></div>' +
+            '<div class="bar-seg bar-chua" style="width:' + pChua + '%"></div>' +
+          '</div>' +
+          '<div class="chart-count">' +
+            '<span style="color:#166534">' + it.doi + '</span>' +
+            ' / ' + it.tong +
+          '</div>' +
+        '</div>';
+    });
+
+    wrap.innerHTML = html;
+  }
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+  render();
+})();
+</script>
