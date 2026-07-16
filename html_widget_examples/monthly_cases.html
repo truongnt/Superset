@@ -94,104 +94,83 @@ tbody tr.grand-total td.col-tinh { background: #fff4d6; border-right: 2px solid 
   fitHost();
   window.addEventListener('resize', fitHost);
 
-  function isoWeekInfo(ts) {
-    var d = new Date(ts);
-    d.setHours(0, 0, 0, 0);
-    var day = (d.getDay() + 6) % 7;
-    d.setDate(d.getDate() - day + 3);
-    var year = d.getFullYear();
-    var w1thu = new Date(year, 0, 4);
-    w1thu.setDate(w1thu.getDate() - (w1thu.getDay() + 6) % 7 + 3);
-    var week = 1 + Math.round((d - w1thu) / 604800000);
-    var mon = new Date(ts); mon.setHours(0,0,0,0);
-    mon.setDate(mon.getDate() - (mon.getDay() + 6) % 7);
-    var sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-    return { year: year, week: week, key: year * 100 + week, mon: mon, sun: sun };
-  }
+  var TEN_THANG = ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6',
+                    'Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'];
 
-  function fmtDate(d) {
-    return String(d.getDate()).padStart(2,'0') + '/' +
-           String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear();
+  function monthInfo(ts) {
+    var d = new Date(ts);
+    var year  = d.getFullYear();
+    var month = d.getMonth() + 1; // 1-12
+    return { year: year, month: month, key: year * 100 + month };
   }
 
   function num(r, key) {
     return +(r[key] || r['SUM__'+key] || r['COUNT__'+key] || 0);
   }
 
-  function emptyWk() { return { mac: 0, chet: 0 }; }
+  function emptyMo() { return { mac: 0, chet: 0 }; }
 
   // ── Tổng hợp dữ liệu ────────────────────────────────────────────────────────
-  var weekMeta = {};
-  var byTinh   = {};   // ten_tinh → { wks: {wk→{mac,chet}}, xas: {xa→{wk→{mac,chet}}}, xOrder: [] }
-  var tinhSet  = [];
+  var monthMeta = {};
+  var byTinh    = {};   // ten_tinh → { mos: {mo→{mac,chet}}, xas: {xa→{mo→{mac,chet}}}, xOrder: [] }
+  var tinhSet   = [];
 
   data.forEach(function (r) {
     var t  = r[COL_TINH] || '(?)';
     var x  = r[COL_XA]   || '';
     var ts = r[COL_DATE];
 
-    if (!byTinh[t]) { byTinh[t] = { wks: {}, xas: {}, xOrder: [] }; tinhSet.push(t); }
+    if (!byTinh[t]) { byTinh[t] = { mos: {}, xas: {}, xOrder: [] }; tinhSet.push(t); }
     if (x && !byTinh[t].xas[x]) { byTinh[t].xas[x] = {}; byTinh[t].xOrder.push(x); }
 
     if (!ts) return;
 
-    var info = isoWeekInfo(+ts);
-    var wk   = info.key;
-    if (!weekMeta[wk]) weekMeta[wk] = info;
+    var info = monthInfo(+ts);
+    var mo   = info.key;
+    if (!monthMeta[mo]) monthMeta[mo] = info;
 
-    if (!byTinh[t].wks[wk]) byTinh[t].wks[wk] = emptyWk();
-    byTinh[t].wks[wk].mac  += num(r, COL_MAC);
-    byTinh[t].wks[wk].chet += num(r, COL_CHET);
+    if (!byTinh[t].mos[mo]) byTinh[t].mos[mo] = emptyMo();
+    byTinh[t].mos[mo].mac  += num(r, COL_MAC);
+    byTinh[t].mos[mo].chet += num(r, COL_CHET);
 
     if (x) {
-      if (!byTinh[t].xas[x][wk]) byTinh[t].xas[x][wk] = emptyWk();
-      byTinh[t].xas[x][wk].mac  += num(r, COL_MAC);
-      byTinh[t].xas[x][wk].chet += num(r, COL_CHET);
+      if (!byTinh[t].xas[x][mo]) byTinh[t].xas[x][mo] = emptyMo();
+      byTinh[t].xas[x][mo].mac  += num(r, COL_MAC);
+      byTinh[t].xas[x][mo].chet += num(r, COL_CHET);
     }
   });
 
-  var weeks = Object.keys(weekMeta).map(Number).sort(function(a,b){
-    var wa = a % 100, wb = b % 100;
-    if (wa !== wb) return wa - wb;
-    return Math.floor(a/100) - Math.floor(b/100);
-  });
-  var tinhs = tinhSet.sort();
-  var fmt   = function(n){ return (+n||0).toLocaleString('vi-VN'); };
+  var months = Object.keys(monthMeta).map(Number).sort(function(a,b){ return a - b; });
+  var tinhs  = tinhSet.sort();
+  var fmt    = function(n){ return (+n||0).toLocaleString('vi-VN'); };
 
   // Tổng toàn quốc
   var grand = {};
-  weeks.forEach(function(wk) {
-    grand[wk] = emptyWk();
+  months.forEach(function(mo) {
+    grand[mo] = emptyMo();
     tinhs.forEach(function(t) {
-      var d = byTinh[t].wks[wk];
-      if (d) { grand[wk].mac += d.mac; grand[wk].chet += d.chet; }
+      var d = byTinh[t].mos[mo];
+      if (d) { grand[mo].mac += d.mac; grand[mo].chet += d.chet; }
     });
   });
 
   // ── Build table ──────────────────────────────────────────────────────────────
   var tbl = document.getElementById('tbl');
 
-  var r1 = '<tr><th class="col-stt" rowspan="3">#</th><th class="col-tinh" rowspan="3">Địa phương</th>';
-  weeks.forEach(function(wk) {
-    r1 += '<th colspan="2">Tuần ' + weekMeta[wk].week + '</th>';
+  var r1 = '<tr><th class="col-stt" rowspan="2">#</th><th class="col-tinh" rowspan="2">Địa phương</th>';
+  months.forEach(function(mo) {
+    var info = monthMeta[mo];
+    r1 += '<th colspan="2">' + TEN_THANG[info.month - 1] + '/' + info.year + '</th>';
   });
   r1 += '</tr>';
 
   var r2 = '<tr>';
-  weeks.forEach(function(wk) {
-    var info = weekMeta[wk];
-    r2 += '<th colspan="2" style="font-size:10px;font-weight:400">'
-        + fmtDate(info.mon) + ' - ' + fmtDate(info.sun) + '</th>';
-  });
+  months.forEach(function() { r2 += '<th>Mắc</th><th>Chết</th>'; });
   r2 += '</tr>';
 
-  var r3 = '<tr>';
-  weeks.forEach(function() { r3 += '<th>Mắc</th><th>Chết</th>'; });
-  r3 += '</tr>';
-
-  function wkCells(wkMap) {
-    return weeks.map(function(wk) {
-      var d = wkMap[wk] || emptyWk();
+  function moCells(moMap) {
+    return months.map(function(mo) {
+      var d = moMap[mo] || emptyMo();
       return '<td class="mac">' + fmt(d.mac) + '</td><td class="chet">' + fmt(d.chet) + '</td>';
     }).join('');
   }
@@ -200,7 +179,7 @@ tbody tr.grand-total td.col-tinh { background: #fff4d6; border-right: 2px solid 
   tbody += '<tr class="grand-total">'
          + '<td class="col-stt"></td>'
          + '<td class="col-tinh">Tổng cộng</td>'
-         + wkCells(grand) + '</tr>';
+         + moCells(grand) + '</tr>';
 
   tinhs.forEach(function(t, i) {
     var tinhId = 'tinh-' + i;
@@ -208,18 +187,18 @@ tbody tr.grand-total td.col-tinh { background: #fff4d6; border-right: 2px solid 
     tbody += '<tr class="tinh-row" data-id="' + tinhId + '">'
            + '<td class="col-stt">' + (i+1) + '</td>'
            + '<td class="col-tinh dia-phuong"><span class="expand-icon">▶</span>' + t + '</td>'
-           + wkCells(tinh.wks) + '</tr>';
+           + moCells(tinh.mos) + '</tr>';
 
     tinh.xOrder.slice().sort().forEach(function(x) {
       tbody += '<tr class="xa-row" data-tinh="' + tinhId + '" style="display:none">'
              + '<td class="col-stt"></td>'
              + '<td class="col-tinh xa-name">' + x + '</td>'
-             + wkCells(tinh.xas[x]) + '</tr>';
+             + moCells(tinh.xas[x]) + '</tr>';
     });
   });
   tbody += '</tbody>';
 
-  tbl.innerHTML = '<thead>' + r1 + r2 + r3 + '</thead>' + tbody;
+  tbl.innerHTML = '<thead>' + r1 + r2 + '</thead>' + tbody;
 
   // Sticky top động
   var offset = 0;
@@ -401,7 +380,7 @@ tbody tr.grand-total td.col-tinh { background: #fff4d6; border-right: 2px solid 
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
       'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
-      '<sheets><sheet name="Theo tuan" sheetId="1" r:id="rId1"/></sheets>' +
+      '<sheets><sheet name="Theo thang" sheetId="1" r:id="rId1"/></sheets>' +
       '</workbook>';
 
     var workbookRelsXml =
@@ -434,22 +413,18 @@ tbody tr.grand-total td.col-tinh { background: #fff4d6; border-right: 2px solid 
   // ── Export Excel (.xlsx) ─────────────────────────────────────────────────────
   document.getElementById('btn-export').addEventListener('click', function () {
     var rows = [];
-
-    // 3 hàng header: Tuần X / khoảng ngày / Mắc,Chết — khớp với bảng hiển thị
     var hdr1 = ['#', 'Địa phương'];
     var hdr2 = ['', ''];
-    var hdr3 = ['', ''];
-    weeks.forEach(function(wk) {
-      var info = weekMeta[wk];
-      hdr1.push('Tuần ' + info.week, '');
-      hdr2.push(fmtDate(info.mon) + ' - ' + fmtDate(info.sun), '');
-      hdr3.push('Mắc', 'Chết');
+    months.forEach(function(mo) {
+      var info = monthMeta[mo];
+      hdr1.push(TEN_THANG[info.month - 1] + '/' + info.year, '');
+      hdr2.push('Mắc', 'Chết');
     });
-    rows.push(hdr1, hdr2, hdr3);
+    rows.push(hdr1, hdr2);
 
     var grandRow = ['', 'Tổng cộng'];
-    weeks.forEach(function(wk) {
-      var d = grand[wk] || emptyWk();
+    months.forEach(function(mo) {
+      var d = grand[mo] || emptyMo();
       grandRow.push(d.mac, d.chet);
     });
     rows.push(grandRow);
@@ -457,38 +432,37 @@ tbody tr.grand-total td.col-tinh { background: #fff4d6; border-right: 2px solid 
     tinhs.forEach(function(t, i) {
       var tinh = byTinh[t];
       var row  = [i+1, t];
-      weeks.forEach(function(wk) {
-        var d = tinh.wks[wk] || emptyWk();
+      months.forEach(function(mo) {
+        var d = tinh.mos[mo] || emptyMo();
         row.push(d.mac, d.chet);
       });
       rows.push(row);
 
       tinh.xOrder.slice().sort().forEach(function(x) {
         var xrow = ['', '  ' + x];
-        weeks.forEach(function(wk) {
-          var d = tinh.xas[x][wk] || emptyWk();
+        months.forEach(function(mo) {
+          var d = tinh.xas[x][mo] || emptyMo();
           xrow.push(d.mac, d.chet);
         });
         rows.push(xrow);
       });
     });
 
-    // Merge ô header: # / Địa phương xuống 3 hàng; mỗi tuần gộp 2 cột trên 2 hàng đầu
+    // Merge ô header: # / Địa phương xuống 2 hàng, tên tháng gộp 2 cột (Mắc + Chết)
     var merges = [
-      { r1: 0, c1: 0, r2: 2, c2: 0 },
-      { r1: 0, c1: 1, r2: 2, c2: 1 },
+      { r1: 0, c1: 0, r2: 1, c2: 0 },
+      { r1: 0, c1: 1, r2: 1, c2: 1 },
     ];
-    weeks.forEach(function (_, i) {
+    months.forEach(function (_, i) {
       var c = 2 + i * 2;
       merges.push({ r1: 0, c1: c, r2: 0, c2: c + 1 });
-      merges.push({ r1: 1, c1: c, r2: 1, c2: c + 1 });
     });
-    var colWidths = [4, 24].concat(weeks.flatMap(function () { return [10, 10]; }));
+    var colWidths = [4, 24].concat(months.flatMap(function () { return [10, 10]; }));
 
     var blob = buildXlsxBlob(rows, merges, colWidths);
     var url  = URL.createObjectURL(blob);
     var a    = document.createElement('a');
-    a.href = url; a.download = 'weekly_cases.xlsx';
+    a.href = url; a.download = 'monthly_cases.xlsx';
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
