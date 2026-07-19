@@ -407,11 +407,63 @@ const EcdsPointMap: React.FC<EcdsPointMapProps> = ({
     return allDrillBgUnits.filter(u => u.parentId && allowedParents.has(u.parentId));
   }, [allDrillBgUnits, filteredTopBgUnits]);
 
+  // Cấp tỉnh (không drill, không startAtDrillLevel): 2+ tỉnh khớp data → hiện ranh giới
+  // toàn quốc thay vì chỉ N tỉnh đó (dễ nhận biết vị trí tương đối, tránh bản đồ "vỡ" khi
+  // filter/RLS thu hẹp còn vài tỉnh rải rác). 0 hoặc 1 tỉnh khớp thì giữ nguyên logic cũ.
+  const topLevelBgUnits = useMemo(
+    () => (filteredTopBgUnits.length > 1 ? topBgUnits : filteredTopBgUnits),
+    [filteredTopBgUnits, topBgUnits],
+  );
+
   const activeBgUnits: BgUnit[] = drillId
     ? (drillBgMap[drillId]?.length ? drillBgMap[drillId] : filteredTopBgUnits)
     : startAtDrillLevel
       ? (filteredDrillBgUnits.length > 0 ? filteredDrillBgUnits : filteredTopBgUnits)
+      : topLevelBgUnits;
+
+  // Vùng để "fit" camera — LUÔN theo đúng vùng có dữ liệu (không theo activeBgUnits),
+  // vì activeBgUnits ở cấp tỉnh có thể là toàn quốc (khi 2+ tỉnh khớp data, xem
+  // topLevelBgUnits ở trên) chỉ để vẽ ranh giới làm ngữ cảnh — không nên dùng để zoom,
+  // nếu không bubble sẽ bị lọt thỏm/to bất thường so với tỷ lệ bản đồ.
+  const fitBgUnits: BgUnit[] = drillId
+    ? (drillBgMap[drillId]?.length ? drillBgMap[drillId] : filteredTopBgUnits)
+    : startAtDrillLevel
+      ? (filteredDrillBgUnits.length > 0 ? filteredDrillBgUnits : filteredTopBgUnits)
       : filteredTopBgUnits;
+
+  // ── Projection ────────────────────────────────────────────────────────────
+  const project = useMemo(() => {
+    if (fitBgUnits.length > 0) {
+      const b = computeBoundsFromUnits(fitBgUnits);
+      if (isFinite(b.minLon)) return makeProjection(b, width, height);
+    }
+    if (points.length > 0) {
+      const b = computeBoundsFromPoints(points);
+      if (isFinite(b.minLon)) return makeProjection(b, width, height);
+    }
+    return null;
+  }, [fitBgUnits, points, width, height]);
+
+  // Mức zoom out tối thiểu — mặc định (k=1) fit khít vùng dữ liệu (fitBgUnits) để bubble
+  // hiển thị đúng tỉ lệ; nới k xuống dưới 1 để user chủ động zoom out/scroll xem hết
+  // ranh giới cả nước (topBgUnits) khi cần, thay vì ép hiện toàn quốc ngay từ đầu.
+  const minZoomK = useMemo(() => {
+    if (!project) return 1;
+    const countryBounds = computeBoundsFromUnits(topBgUnits);
+    if (!isFinite(countryBounds.minLon)) return 1;
+    const corners: Array<[number, number]> = [
+      project(countryBounds.minLon, countryBounds.minLat),
+      project(countryBounds.minLon, countryBounds.maxLat),
+      project(countryBounds.maxLon, countryBounds.minLat),
+      project(countryBounds.maxLon, countryBounds.maxLat),
+    ];
+    const xs = corners.map(c => c[0]);
+    const ys = corners.map(c => c[1]);
+    const pxW = Math.max(...xs) - Math.min(...xs);
+    const pxH = Math.max(...ys) - Math.min(...ys);
+    if (pxW <= 0 || pxH <= 0) return 1;
+    return Math.min(1, width / pxW, height / pxH);
+  }, [project, topBgUnits, width, height]);
 
   // ── Timelapse: auto-advance khi đang play ─────────────────────────────────
   useEffect(() => {
@@ -471,12 +523,12 @@ const EcdsPointMap: React.FC<EcdsPointMapProps> = ({
     const cy = e.clientY - rect.top;
     const factor = e.deltaY < 0 ? 1.2 : 1 / 1.2;
     setZoom(z => {
-      const k = Math.max(1, Math.min(20, z.k * factor));
+      const k = Math.max(minZoomK, Math.min(20, z.k * factor));
       if (k === z.k) return z;
       const r = k / z.k;
       return { k, tx: cx - (cx - z.tx) * r, ty: cy - (cy - z.ty) * r };
     });
-  }, []);
+  }, [minZoomK]);
 
   // Dùng Pointer Events API thay vì Mouse Events:
   // - onPointerDown/pointermove/pointerup hoạt động tốt trong cả embedded iframe lẫn direct
@@ -506,7 +558,7 @@ const EcdsPointMap: React.FC<EcdsPointMapProps> = ({
   }, [zoom.tx, zoom.ty]);
 
   const handleZoomIn    = useCallback(() => setZoom(z => { const k = Math.min(20, z.k * 1.4); const cx = width/2, cy = height/2, r = k/z.k; return { k, tx: cx-(cx-z.tx)*r, ty: cy-(cy-z.ty)*r }; }), [width, height]);
-  const handleZoomOut   = useCallback(() => setZoom(z => { const k = Math.max(1,  z.k / 1.4); const cx = width/2, cy = height/2, r = k/z.k; return { k, tx: cx-(cx-z.tx)*r, ty: cy-(cy-z.ty)*r }; }), [width, height]);
+  const handleZoomOut   = useCallback(() => setZoom(z => { const k = Math.max(minZoomK, z.k / 1.4); const cx = width/2, cy = height/2, r = k/z.k; return { k, tx: cx-(cx-z.tx)*r, ty: cy-(cy-z.ty)*r }; }), [width, height, minZoomK]);
   const handleZoomReset = useCallback(() => setZoom({ k: 1, tx: 0, ty: 0 }), []);
 
   // ── Epi curve scrubber — click + drag để scrub timeline ─────────────────────
@@ -536,19 +588,6 @@ const EcdsPointMap: React.FC<EcdsPointMapProps> = ({
     setTooltip({ x: e.clientX - (rect?.left ?? 0), y: e.clientY - (rect?.top ?? 0), point: pt });
   }, []);
   const handlePtLeave = useCallback(() => setTooltip(null), []);
-
-  // ── Projection ────────────────────────────────────────────────────────────
-  const project = useMemo(() => {
-    if (activeBgUnits.length > 0) {
-      const b = computeBoundsFromUnits(activeBgUnits);
-      if (isFinite(b.minLon)) return makeProjection(b, width, height);
-    }
-    if (points.length > 0) {
-      const b = computeBoundsFromPoints(points);
-      if (isFinite(b.minLon)) return makeProjection(b, width, height);
-    }
-    return null;
-  }, [activeBgUnits, points, width, height]);
 
   // ── Background paths ──────────────────────────────────────────────────────
   const bgPaths = useMemo(() => {

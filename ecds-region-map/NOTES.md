@@ -31,14 +31,12 @@ ecds-region-map/
 │       ├── buildQuery.ts      # Xây dựng SQL query cho primary datasource
 │       ├── transformProps.ts  # Chuyển đổi chartProps → component props
 │       └── controlPanel.tsx   # UI cấu hình chart trong Superset
-├── maps/
-│   ├── vn-provinces.geojson   # Ranh giới cấp tỉnh (63 tỉnh thành)
-│   └── wards/                 # Ranh giới cấp xã, tách theo mã tỉnh
-│       ├── vn-wards-01.geojson
-│       └── ... (35 file)
 ├── package.json
 └── plugin.meta.json
 ```
+
+Ranh giới GeoJSON không còn được ship kèm plugin dưới dạng file tĩnh (`maps/`) — toàn bộ lấy
+từ secondary map dataset qua REST API như mục 1 mô tả. Thư mục `maps/` cũ đã bị xóa.
 
 ---
 
