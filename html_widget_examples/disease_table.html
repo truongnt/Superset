@@ -190,6 +190,13 @@ tbody td.col-tinh.xa-name {
 
   var data = window.__chartData || window.DATA || [];
 
+  // Debug: kiểm tra dataset có đủ cột ngày cho filter không (mở DevTools Console để xem)
+  console.log('[disease_table] cột dữ liệu hiện có:', data[0] ? Object.keys(data[0]) : '(không có dòng nào)');
+  console.log('[disease_table] mẫu ngay_tao/ngay_khoi_phat/ngay_nhap_vien/ngay_sinh:', data[0] ? {
+    ngay_tao: data[0][COL_NGAY_TAO], ngay_khoi_phat: data[0][COL_NGAY_KP],
+    ngay_nhap_vien: data[0][COL_NGAY_NV], ngay_sinh: data[0][COL_NGAY_SINH],
+  } : null);
+
   function fitHost() {
     var host = document.querySelector('.host');
     if (host) host.style.height = (window.innerHeight || 500) + 'px';
