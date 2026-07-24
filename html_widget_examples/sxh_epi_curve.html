@@ -44,9 +44,10 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
     <label>Năm quan sát:</label>
     <select id="f-year"></select>
     <div class="legend">
-      <span><span class="sw" style="background:#cfe3f5"></span>Vùng bình thường (TB ± 1 SD, nền)</span>
-      <span><span class="sw" style="background:#d38a00;border-top:2px dashed #d38a00;height:0"></span>Ngưỡng cảnh báo dịch (TB + 2SD)</span>
-      <span><span class="dot" style="background:#1976d2"></span>Số ca năm đang chọn</span>
+      <span><span class="sw" style="background:#cde2fb"></span>Vùng bình thường (TB ± 1 SD, nền)</span>
+      <span><span class="sw" style="background:#fab219;border-top:2px dashed #fab219;height:0"></span>Ngưỡng cảnh báo dịch (TB + 2SD)</span>
+      <span><span class="dot" style="background:#2a78d6"></span>Số ca (bình thường)</span>
+      <span><span class="dot" style="background:#d03b3b"></span>Số ca (vượt ngưỡng)</span>
     </div>
   </div>
 
@@ -100,19 +101,26 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
     return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
   }
 
-  var thisYear = new Date().getFullYear();
+  var nowMs   = Date.now();
+  var thisYear = new Date(nowMs).getFullYear();
 
   // ── Gom dữ liệu: byYear[year][week] = { mac, chet, tuanDate } ──────────────────
+  // Loại theo đúng ngày (tuanMs > hôm nay) chứ không chỉ theo năm — vừa loại được
+  // năm rác tương lai (vd 2027 khi thực tế mới tháng 7/2026), vừa tự động cắt đúng
+  // tuần cuối cùng đã qua của năm hiện tại (không zero-fill các tuần chưa tới).
   var byYear = {};
   var yearSet = [];
 
   data.forEach(function (r) {
     var year = +r[COL_NAM];
     var week = +r[COL_SO_TUAN];
-    if (!year || !week || year < MIN_YEAR || year > thisYear + 1 || week < 1 || week > MAX_WEEKS) return;
+    if (!year || !week || year < MIN_YEAR || week < 1 || week > MAX_WEEKS) return;
+
+    var tuanMs = toMs(r[COL_TUAN]);
+    if (tuanMs != null && tuanMs > nowMs) return; // tuần chưa tới (dữ liệu rác/ngày lỗi)
 
     if (!byYear[year]) { byYear[year] = {}; yearSet.push(year); }
-    if (!byYear[year][week]) byYear[year][week] = { mac: 0, chet: 0, tuanMs: toMs(r[COL_TUAN]) };
+    if (!byYear[year][week]) byYear[year][week] = { mac: 0, chet: 0, tuanMs: tuanMs };
     byYear[year][week].mac += num(r, COL_MAC);
     byYear[year][week].chet += num(r, COL_CHET);
   });
@@ -243,14 +251,14 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
     // Trục Y: 4 mốc
     var yTicks = [0, 0.25, 0.5, 0.75, 1].map(function (f) { return Math.round(maxY * f); });
     var yGrid = yTicks.map(function (v) {
-      return '<line x1="' + pad.left + '" x2="' + (pad.left + innerW) + '" y1="' + y(v).toFixed(1) + '" y2="' + y(v).toFixed(1) + '" stroke="#eee" stroke-width="1"/>' +
-             '<text x="' + (pad.left - 8) + '" y="' + (y(v) + 4).toFixed(1) + '" text-anchor="end" font-size="10" fill="#888">' + fmt(v) + '</text>';
+      return '<line x1="' + pad.left + '" x2="' + (pad.left + innerW) + '" y1="' + y(v).toFixed(1) + '" y2="' + y(v).toFixed(1) + '" stroke="#e1e0d9" stroke-width="1"/>' +
+             '<text x="' + (pad.left - 8) + '" y="' + (y(v) + 4).toFixed(1) + '" text-anchor="end" font-size="10" fill="#898781">' + fmt(v) + '</text>';
     }).join('');
 
     // Trục X: nhãn mỗi ~4 tuần
     var xTicks = rows.map(function (r, i) {
       if (i % 4 !== 0 && i !== n - 1) return '';
-      return '<text x="' + x(i).toFixed(1) + '" y="' + (pad.top + innerH + 18) + '" text-anchor="middle" font-size="9" fill="#888">T' + r.week + '</text>';
+      return '<text x="' + x(i).toFixed(1) + '" y="' + (pad.top + innerH + 18) + '" text-anchor="middle" font-size="9" fill="#898781">T' + r.week + '</text>';
     }).join('');
 
     var channelArea = areaPath(function (r) { return r.channelLow; }, function (r) { return r.channelHigh; });
@@ -261,15 +269,15 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
       if (r.mac == null) return '';
       var over = r.mac > r.threshold;
       return '<circle class="pt" data-i="' + i + '" cx="' + x(i).toFixed(1) + '" cy="' + y(r.mac).toFixed(1) +
-             '" r="3.2" fill="' + (over ? '#d32f2f' : '#1976d2') + '" stroke="#fff" stroke-width="1"/>';
+             '" r="3.2" fill="' + (over ? '#d03b3b' : '#2a78d6') + '" stroke="#fcfcfb" stroke-width="1"/>';
     }).join('');
 
     svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     svg.innerHTML =
       '<g>' + yGrid + xTicks +
-      '<path d="' + channelArea + '" fill="#cfe3f5" opacity="0.6" stroke="none"/>' +
-      '<path d="' + thresholdLine + '" fill="none" stroke="#d38a00" stroke-width="1.5" stroke-dasharray="5,3"/>' +
-      '<path d="' + macLine + '" fill="none" stroke="#1976d2" stroke-width="2"/>' +
+      '<path d="' + channelArea + '" fill="#cde2fb" opacity="0.7" stroke="none"/>' +
+      '<path d="' + thresholdLine + '" fill="none" stroke="#fab219" stroke-width="1.5" stroke-dasharray="5,3"/>' +
+      '<path d="' + macLine + '" fill="none" stroke="#2a78d6" stroke-width="2"/>' +
       points +
       '</g>';
 
