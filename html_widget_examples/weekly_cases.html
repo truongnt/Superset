@@ -30,6 +30,16 @@ thead tr:nth-child(2) th { font-weight: 400; font-size: 11px; }
 tbody td.col-stt  { position: sticky; left: 0;    z-index: 2; color: #bbb; font-size: 11px; }
 tbody td.col-tinh { position: sticky; left: 36px; z-index: 2; }
 
+/* Vùng miền */
+tbody tr.vung-row td { background: #e3f3ea; font-weight: 700; color: #1e5c3f; }
+tbody td.col-tinh.vung-name {
+  text-align: left; cursor: pointer; user-select: none;
+  border-right: 2px solid #2e7d5b;
+}
+tbody td.col-tinh.vung-name:hover { background: #d1ebdd; }
+tbody tr.vung-row:hover td { background: #d9f0e3 !important; }
+tbody tr.vung-row:hover td.vung-name { background: #c8e8d7 !important; }
+
 /* Tỉnh row */
 tbody tr.tinh-row td { background: #eef5fb; font-weight: 600; }
 tbody td.col-tinh.dia-phuong {
@@ -39,6 +49,7 @@ tbody td.col-tinh.dia-phuong {
 tbody td.col-tinh.dia-phuong:hover { background: #d8ebf7; }
 tbody tr.tinh-row:hover td { background: #e6f2ff !important; }
 tbody tr.tinh-row:hover td.dia-phuong { background: #cce5f5 !important; }
+.indent-1 { padding-left: 22px !important; }
 
 /* Xã row */
 tbody tr.xa-row td { background: #f8fbff; font-weight: 400; }
@@ -47,6 +58,7 @@ tbody td.col-tinh.xa-name {
   text-align: left; padding-left: 28px; font-weight: 400;
   border-right: 2px solid #4276A4; background: #f8fbff;
 }
+.indent-2 { padding-left: 42px !important; }
 
 .mac  { color: #1976d2; font-variant-numeric: tabular-nums; }
 .chet { color: #d32f2f; font-variant-numeric: tabular-nums; }
@@ -56,6 +68,7 @@ tbody tr.grand-total td { background: #fff4d6; font-weight: bold; color: #5a4500
 tbody tr.grand-total td.col-tinh { background: #fff4d6; border-right: 2px solid #d39c00; cursor: default; text-align: left; }
 
 .expand-icon { display: inline-block; width: 16px; font-size: 10px; transition: transform .15s; }
+.vung-row.expanded .expand-icon,
 .tinh-row.expanded .expand-icon { transform: rotate(90deg); }
 
 .btn-export {
@@ -84,6 +97,32 @@ tbody tr.grand-total td.col-tinh { background: #fff4d6; border-right: 2px solid 
   var COL_MAC  = 'tong_so';
   var COL_CHET = 'tu_vong';
   // ─────────────────────────────────────────────────────────────────────────────
+
+  // ── Phân loại tỉnh theo vùng miền (theo đơn vị hành chính 34 tỉnh/thành từ 07/2025) ──
+  // Miền Bắc (18, tính đến Hà Tĩnh) / Miền Trung (5) / Tây Nguyên (3) / Miền Nam (còn lại, 8)
+  var REGION_MAP = {
+    'Cao Bằng': 'Miền Bắc', 'Điện Biên': 'Miền Bắc', 'Lai Châu': 'Miền Bắc', 'Sơn La': 'Miền Bắc',
+    'Lào Cai': 'Miền Bắc', 'Tuyên Quang': 'Miền Bắc', 'Thái Nguyên': 'Miền Bắc', 'Phú Thọ': 'Miền Bắc',
+    'Bắc Ninh': 'Miền Bắc', 'Hưng Yên': 'Miền Bắc', 'Ninh Bình': 'Miền Bắc', 'Quảng Ninh': 'Miền Bắc',
+    'Lạng Sơn': 'Miền Bắc', 'Hà Nội': 'Miền Bắc', 'Hải Phòng': 'Miền Bắc', 'Thanh Hóa': 'Miền Bắc',
+    'Nghệ An': 'Miền Bắc', 'Hà Tĩnh': 'Miền Bắc',
+
+    'Quảng Trị': 'Miền Trung', 'Huế': 'Miền Trung', 'Đà Nẵng': 'Miền Trung',
+    'Quảng Ngãi': 'Miền Trung', 'Khánh Hòa': 'Miền Trung',
+
+    'Gia Lai': 'Tây Nguyên', 'Đắk Lắk': 'Tây Nguyên', 'Lâm Đồng': 'Tây Nguyên',
+
+    'Hồ Chí Minh': 'Miền Nam', 'Đồng Nai': 'Miền Nam', 'Tây Ninh': 'Miền Nam', 'Cần Thơ': 'Miền Nam',
+    'Vĩnh Long': 'Miền Nam', 'Đồng Tháp': 'Miền Nam', 'An Giang': 'Miền Nam', 'Cà Mau': 'Miền Nam',
+  };
+  var REGION_ORDER = ['Miền Bắc', 'Miền Trung', 'Tây Nguyên', 'Miền Nam'];
+
+  function bareName(name) {
+    return String(name || '').replace(/^(Tỉnh|Thành phố|TP\.?)\s+/i, '').trim();
+  }
+  function regionOf(tinhName) {
+    return REGION_MAP[bareName(tinhName)] || null;
+  }
 
   var data = window.__chartData || window.DATA || [];
 
@@ -168,6 +207,29 @@ tbody tr.grand-total td.col-tinh { background: #fff4d6; border-right: 2px solid 
     });
   });
 
+  // Gom tỉnh theo vùng miền — chỉ hiển thị dòng vùng khi dữ liệu trải ≥ 2 vùng
+  var byRegion = {};
+  tinhs.forEach(function(t) {
+    var reg = regionOf(t) || 'Khác';
+    if (!byRegion[reg]) byRegion[reg] = [];
+    byRegion[reg].push(t);
+  });
+  var presentRegions = REGION_ORDER.filter(function(r) { return byRegion[r] && byRegion[r].length; });
+  if (byRegion['Khác'] && byRegion['Khác'].length) presentRegions.push('Khác');
+  var showRegions = presentRegions.length >= 2;
+
+  function regionWkTotals(tinhList) {
+    var totals = {};
+    weeks.forEach(function(wk) {
+      totals[wk] = emptyWk();
+      tinhList.forEach(function(t) {
+        var d = byTinh[t].wks[wk];
+        if (d) { totals[wk].mac += d.mac; totals[wk].chet += d.chet; }
+      });
+    });
+    return totals;
+  }
+
   // ── Build table ──────────────────────────────────────────────────────────────
   var tbl = document.getElementById('tbl');
 
@@ -196,27 +258,47 @@ tbody tr.grand-total td.col-tinh { background: #fff4d6; border-right: 2px solid 
     }).join('');
   }
 
+  function tinhRowHtml(t, i, idPrefix, indent) {
+    var tinhId = idPrefix + 'tinh-' + i;
+    var tinh   = byTinh[t];
+    var html = '<tr class="tinh-row" data-id="' + tinhId + '"'
+             + (indent ? ' data-vung="' + indent.vungId + '"' : '') + '>'
+             + '<td class="col-stt">' + (i+1) + '</td>'
+             + '<td class="col-tinh dia-phuong' + (indent ? ' indent-1' : '') + '">'
+             + '<span class="expand-icon">▶</span>' + t + '</td>'
+             + wkCells(tinh.wks) + '</tr>';
+    tinh.xOrder.slice().sort().forEach(function(x) {
+      html += '<tr class="xa-row" data-tinh="' + tinhId + '"'
+            + (indent ? ' data-vung="' + indent.vungId + '"' : '')
+            + ' style="display:none">'
+            + '<td class="col-stt"></td>'
+            + '<td class="col-tinh xa-name' + (indent ? ' indent-2' : '') + '">' + x + '</td>'
+            + wkCells(tinh.xas[x]) + '</tr>';
+    });
+    return html;
+  }
+
   var tbody = '<tbody>';
   tbody += '<tr class="grand-total">'
          + '<td class="col-stt"></td>'
          + '<td class="col-tinh">Tổng cộng</td>'
          + wkCells(grand) + '</tr>';
 
-  tinhs.forEach(function(t, i) {
-    var tinhId = 'tinh-' + i;
-    var tinh   = byTinh[t];
-    tbody += '<tr class="tinh-row" data-id="' + tinhId + '">'
-           + '<td class="col-stt">' + (i+1) + '</td>'
-           + '<td class="col-tinh dia-phuong"><span class="expand-icon">▶</span>' + t + '</td>'
-           + wkCells(tinh.wks) + '</tr>';
-
-    tinh.xOrder.slice().sort().forEach(function(x) {
-      tbody += '<tr class="xa-row" data-tinh="' + tinhId + '" style="display:none">'
+  if (showRegions) {
+    presentRegions.forEach(function(region, ri) {
+      var vungId = 'vung-' + ri;
+      var regionTinhs = byRegion[region].slice().sort();
+      tbody += '<tr class="vung-row expanded" data-id="' + vungId + '">'
              + '<td class="col-stt"></td>'
-             + '<td class="col-tinh xa-name">' + x + '</td>'
-             + wkCells(tinh.xas[x]) + '</tr>';
+             + '<td class="col-tinh vung-name"><span class="expand-icon">▶</span>' + region + '</td>'
+             + wkCells(regionWkTotals(regionTinhs)) + '</tr>';
+      regionTinhs.forEach(function(t, i) {
+        tbody += tinhRowHtml(t, i, vungId + '-', { vungId: vungId });
+      });
     });
-  });
+  } else {
+    tinhs.forEach(function(t, i) { tbody += tinhRowHtml(t, i, '', null); });
+  }
   tbody += '</tbody>';
 
   tbl.innerHTML = '<thead>' + r1 + r2 + r3 + '</thead>' + tbody;
@@ -228,9 +310,26 @@ tbody tr.grand-total td.col-tinh { background: #fff4d6; border-right: 2px solid 
     offset += row.offsetHeight;
   });
 
+  // Vùng: click để mở/đóng toàn bộ tỉnh (và xã đang mở) bên trong
+  tbl.querySelectorAll('.vung-row').forEach(function(row) {
+    row.addEventListener('click', function() {
+      var id = row.dataset.id;
+      var expanded = row.classList.toggle('expanded');
+      tbl.querySelectorAll('tr.tinh-row[data-vung="' + id + '"]').forEach(function(tr) {
+        tr.style.display = expanded ? 'table-row' : 'none';
+      });
+      tbl.querySelectorAll('tr.xa-row[data-vung="' + id + '"]').forEach(function(xr) {
+        if (!expanded) { xr.style.display = 'none'; return; }
+        var tinhRow = tbl.querySelector('tr.tinh-row[data-id="' + xr.dataset.tinh + '"]');
+        xr.style.display = (tinhRow && tinhRow.classList.contains('expanded')) ? 'table-row' : 'none';
+      });
+    });
+  });
+
   // Expand/collapse
   tbl.querySelectorAll('.tinh-row').forEach(function(row) {
-    row.addEventListener('click', function() {
+    row.addEventListener('click', function(e) {
+      e.stopPropagation();
       var id       = this.dataset.id;
       var expanded = this.classList.toggle('expanded');
       tbl.querySelectorAll('.xa-row[data-tinh="' + id + '"]').forEach(function(r) {
@@ -447,31 +546,36 @@ tbody tr.grand-total td.col-tinh { background: #fff4d6; border-right: 2px solid 
     });
     rows.push(hdr1, hdr2, hdr3);
 
-    var grandRow = ['', 'Tổng cộng'];
-    weeks.forEach(function(wk) {
-      var d = grand[wk] || emptyWk();
-      grandRow.push(d.mac, d.chet);
-    });
-    rows.push(grandRow);
-
-    tinhs.forEach(function(t, i) {
-      var tinh = byTinh[t];
-      var row  = [i+1, t];
+    function pushWkRow(name, wkMap, numCol) {
+      var row = [numCol != null ? numCol : '', name];
       weeks.forEach(function(wk) {
-        var d = tinh.wks[wk] || emptyWk();
+        var d = wkMap[wk] || emptyWk();
         row.push(d.mac, d.chet);
       });
       rows.push(row);
+    }
 
-      tinh.xOrder.slice().sort().forEach(function(x) {
-        var xrow = ['', '  ' + x];
-        weeks.forEach(function(wk) {
-          var d = tinh.xas[x][wk] || emptyWk();
-          xrow.push(d.mac, d.chet);
+    pushWkRow('Tổng cộng', grand, '');
+
+    if (showRegions) {
+      presentRegions.forEach(function(region) {
+        var regionTinhs = byRegion[region].slice().sort();
+        pushWkRow(region, regionWkTotals(regionTinhs), '');
+        regionTinhs.forEach(function(t, i) {
+          pushWkRow(t, byTinh[t].wks, i + 1);
+          byTinh[t].xOrder.slice().sort().forEach(function(x) {
+            pushWkRow('  ' + x, byTinh[t].xas[x], '');
+          });
         });
-        rows.push(xrow);
       });
-    });
+    } else {
+      tinhs.forEach(function(t, i) {
+        pushWkRow(t, byTinh[t].wks, i + 1);
+        byTinh[t].xOrder.slice().sort().forEach(function(x) {
+          pushWkRow('  ' + x, byTinh[t].xas[x], '');
+        });
+      });
+    }
 
     // Merge ô header: # / Địa phương xuống 3 hàng; mỗi tuần gộp 2 cột trên 2 hàng đầu
     var merges = [
