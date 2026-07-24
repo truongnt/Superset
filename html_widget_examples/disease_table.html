@@ -112,26 +112,14 @@ tbody td.col-tinh.xa-name {
 </style>
 
 <div class="host">
-  <!-- Filter panel: 3 khoảng thời gian, giống epi_report.html -->
+  <!-- Filter panel: khoảng thời gian theo ngày khởi phát/nhập viện (dataset không có ngày tạo/ngày sinh) -->
   <div class="filter-panel">
     <span class="filter-section-title">Thời gian</span>
-    <div class="filter-group">
-      <span class="filter-label">Ngày tạo:</span>
-      <input type="date" id="f-tao-from">
-      <span class="sep">đến</span>
-      <input type="date" id="f-tao-to">
-    </div>
     <div class="filter-group">
       <span class="filter-label">Ngày khởi phát / Nhập viện:</span>
       <input type="date" id="f-kp-from">
       <span class="sep">đến</span>
       <input type="date" id="f-kp-to">
-    </div>
-    <div class="filter-group">
-      <span class="filter-label">Ngày sinh:</span>
-      <input type="date" id="f-ns-from">
-      <span class="sep">đến</span>
-      <input type="date" id="f-ns-to">
     </div>
     <button class="btn-reset" id="btn-reset">↺ Xóa bộ lọc</button>
   </div>
@@ -155,11 +143,10 @@ tbody td.col-tinh.xa-name {
   var COL_BENH = 'ten_benh';
   var COL_MAC  = 'tong_so';
   var COL_CHET = 'tu_vong';
-  // 3 cột ngày dùng để lọc theo khoảng thời gian — giống epi_report.html
-  var COL_NGAY_TAO  = 'ngay_tao';
-  var COL_NGAY_KP   = 'ngay_khoi_phat';
-  var COL_NGAY_NV   = 'ngay_nhap_vien';   // fallback nếu không có ngay_khoi_phat
-  var COL_NGAY_SINH = 'ngay_sinh';
+  // Cột ngày dùng để lọc theo khoảng thời gian — dataset này chỉ có khởi phát/nhập viện
+  // (không có ngày tạo / ngày sinh, đã kiểm tra qua console log)
+  var COL_NGAY_KP = 'ngay_khoi_phat';
+  var COL_NGAY_NV = 'ngay_nhap_vien';   // fallback nếu không có ngay_khoi_phat
   // ─────────────────────────────────────────────────────────────────────────────
 
   // ── Phân loại tỉnh theo vùng miền (theo đơn vị hành chính 34 tỉnh/thành từ 07/2025) ──
@@ -189,13 +176,6 @@ tbody td.col-tinh.xa-name {
   }
 
   var data = window.__chartData || window.DATA || [];
-
-  // Debug: kiểm tra dataset có đủ cột ngày cho filter không (mở DevTools Console để xem)
-  console.log('[disease_table] cột dữ liệu hiện có:', data[0] ? Object.keys(data[0]) : '(không có dòng nào)');
-  console.log('[disease_table] mẫu ngay_tao/ngay_khoi_phat/ngay_nhap_vien/ngay_sinh:', data[0] ? {
-    ngay_tao: data[0][COL_NGAY_TAO], ngay_khoi_phat: data[0][COL_NGAY_KP],
-    ngay_nhap_vien: data[0][COL_NGAY_NV], ngay_sinh: data[0][COL_NGAY_SINH],
-  } : null);
 
   function fitHost() {
     var host = document.querySelector('.host');
@@ -402,30 +382,23 @@ tbody td.col-tinh.xa-name {
   // ── Rebuild: filter → summarize → render ────────────────────────────────────
   var _state = null;
 
-  var DATE_INPUT_IDS = ['f-tao-from','f-tao-to','f-kp-from','f-kp-to','f-ns-from','f-ns-to'];
+  var DATE_INPUT_IDS = ['f-kp-from','f-kp-to'];
 
   function getFilters() {
     return {
-      taoFrom: document.getElementById('f-tao-from').value,
-      taoTo:   document.getElementById('f-tao-to').value,
-      kpFrom:  document.getElementById('f-kp-from').value,
-      kpTo:    document.getElementById('f-kp-to').value,
-      nsFrom:  document.getElementById('f-ns-from').value,
-      nsTo:    document.getElementById('f-ns-to').value,
+      kpFrom: document.getElementById('f-kp-from').value,
+      kpTo:   document.getElementById('f-kp-to').value,
     };
   }
 
   function hasFilter(f) {
-    return !!(f.taoFrom || f.taoTo || f.kpFrom || f.kpTo || f.nsFrom || f.nsTo);
+    return !!(f.kpFrom || f.kpTo);
   }
 
   function applyFilters(f) {
     return data.filter(function(r) {
-      if (!inRange(r[COL_NGAY_TAO], f.taoFrom, f.taoTo)) return false;
       var kp = r[COL_NGAY_KP] || r[COL_NGAY_NV];
-      if (!inRange(kp, f.kpFrom, f.kpTo)) return false;
-      if (!inRange(r[COL_NGAY_SINH], f.nsFrom, f.nsTo)) return false;
-      return true;
+      return inRange(kp, f.kpFrom, f.kpTo);
     });
   }
 
@@ -451,11 +424,9 @@ tbody td.col-tinh.xa-name {
     rebuild();
   });
 
-  // Mỗi cặp ngày: đến ngày luôn >= từ ngày
+  // Đến ngày luôn >= từ ngày
   var datePairs = [
-    ['f-tao-from', 'f-tao-to'],
-    ['f-kp-from',  'f-kp-to'],
-    ['f-ns-from',  'f-ns-to'],
+    ['f-kp-from', 'f-kp-to'],
   ];
   datePairs.forEach(function(pair) {
     var fromEl = document.getElementById(pair[0]);
