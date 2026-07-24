@@ -1,0 +1,282 @@
+<style>
+html, body { margin: 0; padding: 0; overflow: hidden; }
+.host { display: flex; flex-direction: column; width: 100%; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+.summary {
+  flex-shrink: 0; display: flex; gap: 10px; padding: 10px 12px;
+  background: #f6f8fa; border-bottom: 2px solid #d0d7de; flex-wrap: wrap;
+}
+.stat-card {
+  flex: 1; min-width: 110px; background: #fff; border: 1px solid #e1e0d9; border-radius: 8px;
+  padding: 10px 14px; text-align: center;
+}
+.stat-card .label { font-size: 11px; color: #52514e; margin-bottom: 4px; }
+.stat-card .value { font-size: 22px; font-weight: 700; color: #0b0b0b; }
+.stat-card .value.critical { color: #d03b3b; }
+
+.body { flex: 1; overflow: auto; padding: 10px 12px; min-height: 0; }
+
+.bars { margin-bottom: 14px; }
+.bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.bar-label { width: 190px; flex-shrink: 0; font-size: 12px; color: #0b0b0b; text-align: right; }
+.bar-track { flex: 1; background: #e1e0d9; border-radius: 4px; height: 20px; position: relative; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 4px; display: flex; align-items: center; }
+.bar-value { margin-left: 8px; font-size: 12px; color: #52514e; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+table {
+  width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px;
+}
+th, td {
+  border-right: 1px solid #e1e0d9; border-bottom: 1px solid #e1e0d9;
+  padding: 6px 10px; text-align: center; vertical-align: middle; background: #fff;
+}
+thead th { background: #4276A4; color: #fff; font-weight: 600; }
+td.ten-phan-do { text-align: left; font-weight: 600; }
+td.num { font-variant-numeric: tabular-nums; }
+tr.grand-total td { background: #fff4d6; font-weight: bold; color: #5a4500; }
+
+.footer {
+  flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px; border-top: 1px solid #d0d7de; background: #f6f8fa;
+}
+.btn-export {
+  padding: 4px 12px; border: none; border-radius: 4px;
+  background: #217346; color: #fff; cursor: pointer;
+  font-size: 12px; font-weight: 600; line-height: 1.5; font-family: inherit;
+}
+.btn-export:hover { background: #185c38; }
+.note { font-size: 11px; color: #52514e; }
+</style>
+
+<div class="host">
+  <div class="summary" id="summary"></div>
+  <div class="body">
+    <div class="bars" id="bars"></div>
+    <table id="tbl"></table>
+  </div>
+  <div class="footer">
+    <button class="btn-export" id="btn-export">⬇ Excel</button>
+    <span class="note">Phân độ lâm sàng theo WHO (D / D+WS / SD) — xem chi tiết cách quy đổi trong ghi chú dashboard.</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ── Tên cột dataset — chỉnh nếu khác. Nguồn: vw_sxh_phan_do ───────────────────
+  var COL_PHAN_DO = 'phan_do';
+  var COL_MAC     = 'tong_ca';
+  var COL_CHET    = 'tu_vong';
+
+  // Thứ tự hiển thị + màu theo mức độ (status color: nhẹ→nặng, palette đã tra cứu)
+  var ORDER = [
+    { key: 'Không có dấu hiệu cảnh báo', color: '#0ca30c' },
+    { key: 'Có dấu hiệu cảnh báo',       color: '#fab219' },
+    { key: 'Nặng',                       color: '#d03b3b' },
+    { key: 'Chưa phân độ',               color: '#898781' },
+  ];
+
+  var data = window.__chartData || window.DATA || [];
+  var fmt  = function (n) { return (+n || 0).toLocaleString('vi-VN'); };
+
+  function fitHost() {
+    var host = document.querySelector('.host');
+    if (host) host.style.height = (window.innerHeight || 500) + 'px';
+  }
+  fitHost();
+  window.addEventListener('resize', fitHost);
+
+  function num(r, key) {
+    return +(r[key] || r['SUM__' + key] || r['COUNT__' + key] || 0);
+  }
+
+  // ── Gom dữ liệu theo phan_do ───────────────────────────────────────────────────
+  var byPhanDo = {};
+  data.forEach(function (r) {
+    var k = r[COL_PHAN_DO] || 'Chưa phân độ';
+    if (!byPhanDo[k]) byPhanDo[k] = { mac: 0, chet: 0 };
+    byPhanDo[k].mac += num(r, COL_MAC);
+    byPhanDo[k].chet += num(r, COL_CHET);
+  });
+
+  var rows = ORDER.map(function (o) {
+    var d = byPhanDo[o.key] || { mac: 0, chet: 0 };
+    return { key: o.key, color: o.color, mac: d.mac, chet: d.chet };
+  });
+  // Thêm bất kỳ nhãn lạ nào không nằm trong ORDER (phòng hờ, không nên xảy ra)
+  Object.keys(byPhanDo).forEach(function (k) {
+    if (!ORDER.some(function (o) { return o.key === k; })) {
+      rows.push({ key: k, color: '#c3c2b7', mac: byPhanDo[k].mac, chet: byPhanDo[k].chet });
+    }
+  });
+
+  var grandMac = rows.reduce(function (s, r) { return s + r.mac; }, 0);
+  var grandChet = rows.reduce(function (s, r) { return s + r.chet; }, 0);
+  var grandCfr = grandMac > 0 ? (grandChet / grandMac * 100) : 0;
+  var maxMac = Math.max.apply(null, rows.map(function (r) { return r.mac; })) || 1;
+
+  // ── Summary cards ──────────────────────────────────────────────────────────────
+  document.getElementById('summary').innerHTML =
+    '<div class="stat-card"><div class="label">Tổng số ca</div><div class="value">' + fmt(grandMac) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Tử vong</div><div class="value critical">' + fmt(grandChet) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Tỷ lệ tử vong (CFR)</div><div class="value critical">' + grandCfr.toFixed(3) + '%</div></div>';
+
+  // ── Bar chart ─────────────────────────────────────────────────────────────────
+  document.getElementById('bars').innerHTML = rows.map(function (r) {
+    var pct = grandMac > 0 ? (r.mac / grandMac * 100) : 0;
+    var widthPct = (r.mac / maxMac * 100).toFixed(1);
+    return '<div class="bar-row">' +
+      '<div class="bar-label">' + r.key + '</div>' +
+      '<div class="bar-track"><div class="bar-fill" style="width:' + widthPct + '%;background:' + r.color + '"></div></div>' +
+      '<div class="bar-value">' + fmt(r.mac) + ' (' + pct.toFixed(1) + '%)</div>' +
+      '</div>';
+  }).join('');
+
+  // ── Table ────────────────────────────────────────────────────────────────────
+  var tbl = document.getElementById('tbl');
+  var thead = '<thead><tr><th style="text-align:left">Phân độ lâm sàng</th><th>Số ca</th><th>Tỷ lệ</th><th>Tử vong</th><th>CFR trong nhóm</th></tr></thead>';
+  var tbody = '<tbody>';
+  rows.forEach(function (r) {
+    var pct = grandMac > 0 ? (r.mac / grandMac * 100) : 0;
+    var cfr = r.mac > 0 ? (r.chet / r.mac * 100) : 0;
+    tbody += '<tr>' +
+      '<td class="ten-phan-do" style="border-left:4px solid ' + r.color + '">' + r.key + '</td>' +
+      '<td class="num">' + fmt(r.mac) + '</td>' +
+      '<td class="num">' + pct.toFixed(1) + '%</td>' +
+      '<td class="num">' + fmt(r.chet) + '</td>' +
+      '<td class="num">' + cfr.toFixed(3) + '%</td>' +
+      '</tr>';
+  });
+  tbody += '<tr class="grand-total"><td class="ten-phan-do">Tổng cộng</td>' +
+    '<td class="num">' + fmt(grandMac) + '</td><td class="num">100%</td>' +
+    '<td class="num">' + fmt(grandChet) + '</td><td class="num">' + grandCfr.toFixed(3) + '%</td></tr>';
+  tbody += '</tbody>';
+  tbl.innerHTML = thead + tbody;
+
+  // ── Ghi .xlsx thuần JS (không phụ thuộc CDN) ─────────────────────────────────
+  function xmlEscape(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c];
+    });
+  }
+  function colLetter(i) {
+    var s = ''; i += 1;
+    while (i > 0) { var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); }
+    return s;
+  }
+  function crc32(bytes) {
+    var table = crc32._table || (crc32._table = (function () {
+      var t = [];
+      for (var n = 0; n < 256; n++) {
+        var c = n;
+        for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        t[n] = c >>> 0;
+      }
+      return t;
+    })());
+    var crc = 0xFFFFFFFF;
+    for (var i = 0; i < bytes.length; i++) crc = table[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  function buildZip(files) {
+    var enc = new TextEncoder();
+    var localChunks = [], centralChunks = [], offset = 0;
+    files.forEach(function (f) {
+      var nameBytes = enc.encode(f.name), data = enc.encode(f.content);
+      var crc = crc32(data), size = data.length;
+      var local = new Uint8Array(30 + nameBytes.length);
+      var lv = new DataView(local.buffer);
+      lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0, true);
+      lv.setUint16(8, 0, true); lv.setUint16(10, 0, true); lv.setUint16(12, 0, true);
+      lv.setUint32(14, crc, true); lv.setUint32(18, size, true); lv.setUint32(22, size, true);
+      lv.setUint16(26, nameBytes.length, true); lv.setUint16(28, 0, true);
+      local.set(nameBytes, 30);
+      localChunks.push(local, data);
+
+      var central = new Uint8Array(46 + nameBytes.length);
+      var cv = new DataView(central.buffer);
+      cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
+      cv.setUint16(8, 0, true); cv.setUint16(10, 0, true); cv.setUint16(12, 0, true); cv.setUint16(14, 0, true);
+      cv.setUint32(16, crc, true); cv.setUint32(20, size, true); cv.setUint32(24, size, true);
+      cv.setUint16(28, nameBytes.length, true); cv.setUint16(30, 0, true); cv.setUint16(32, 0, true);
+      cv.setUint16(34, 0, true); cv.setUint16(36, 0, true); cv.setUint32(38, 0, true); cv.setUint32(42, offset, true);
+      central.set(nameBytes, 46);
+      centralChunks.push(central);
+      offset += local.length + data.length;
+    });
+    var centralSize = centralChunks.reduce(function (s, p) { return s + p.length; }, 0);
+    var centralOffset = offset;
+    var end = new Uint8Array(22);
+    var ev = new DataView(end.buffer);
+    ev.setUint32(0, 0x06054b50, true); ev.setUint16(4, 0, true); ev.setUint16(6, 0, true);
+    ev.setUint16(8, files.length, true); ev.setUint16(10, files.length, true);
+    ev.setUint32(12, centralSize, true); ev.setUint32(16, centralOffset, true); ev.setUint16(20, 0, true);
+    return new Blob(localChunks.concat(centralChunks, [end]), {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+  }
+  function buildXlsxBlob(rowsAoa) {
+    var sheetRows = rowsAoa.map(function (row, r) {
+      var cells = row.map(function (v, c) {
+        var ref = colLetter(c) + (r + 1);
+        if (v === '' || v == null) return '';
+        if (typeof v === 'number' && !isNaN(v)) return '<c r="' + ref + '"><v>' + v + '</v></c>';
+        return '<c r="' + ref + '" t="inlineStr"><is><t xml:space="preserve">' + xmlEscape(v) + '</t></is></c>';
+      }).join('');
+      return '<row r="' + (r + 1) + '">' + cells + '</row>';
+    }).join('');
+    var sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<cols><col min="1" max="1" width="28" customWidth="1"/><col min="2" max="5" width="14" customWidth="1"/></cols>' +
+      '<sheetData>' + sheetRows + '</sheetData></worksheet>';
+    var contentTypesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>';
+    var rootRelsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+    var workbookXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+      '<sheets><sheet name="Phan do" sheetId="1" r:id="rId1"/></sheets></workbook>';
+    var workbookRelsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
+    var stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>' +
+      '<fills count="1"><fill><patternFill patternType="none"/></fill></fills>' +
+      '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs></styleSheet>';
+    return buildZip([
+      { name: '[Content_Types].xml', content: contentTypesXml },
+      { name: '_rels/.rels', content: rootRelsXml },
+      { name: 'xl/workbook.xml', content: workbookXml },
+      { name: 'xl/_rels/workbook.xml.rels', content: workbookRelsXml },
+      { name: 'xl/styles.xml', content: stylesXml },
+      { name: 'xl/worksheets/sheet1.xml', content: sheetXml },
+    ]);
+  }
+
+  document.getElementById('btn-export').addEventListener('click', function () {
+    var aoa = [['Phân độ lâm sàng', 'Số ca', 'Tỷ lệ (%)', 'Tử vong', 'CFR trong nhóm (%)']];
+    rows.forEach(function (r) {
+      var pct = grandMac > 0 ? (r.mac / grandMac * 100) : 0;
+      var cfr = r.mac > 0 ? (r.chet / r.mac * 100) : 0;
+      aoa.push([r.key, r.mac, +pct.toFixed(2), r.chet, +cfr.toFixed(3)]);
+    });
+    aoa.push(['Tổng cộng', grandMac, 100, grandChet, +grandCfr.toFixed(3)]);
+    var blob = buildXlsxBlob(aoa);
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = 'sxh_phan_do.xlsx';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  });
+})();
+</script>

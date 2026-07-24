@@ -163,6 +163,7 @@ tbody tr.grand-total td.col-tinh { background: #fff4d6; border-right: 2px solid 
     if (x && !byTinh[t].xas[x]) { byTinh[t].xas[x] = {}; byTinh[t].xOrder.push(x); }
 
     if (!ts) return;
+    if (+ts > Date.now()) return; // bỏ dữ liệu lỗi ngày tương lai
 
     var info = monthInfo(+ts);
     var mo   = info.key;
