@@ -111,14 +111,26 @@ tbody td.col-tinh.xa-name {
 </style>
 
 <div class="host">
-  <!-- Filter panel: khoảng thời gian, giống epi_report.html -->
+  <!-- Filter panel: 3 khoảng thời gian, giống epi_report.html -->
   <div class="filter-panel">
     <span class="filter-section-title">Thời gian</span>
     <div class="filter-group">
-      <span class="filter-label">Từ ngày:</span>
-      <input type="date" id="f-ngay-from">
+      <span class="filter-label">Ngày tạo:</span>
+      <input type="date" id="f-tao-from">
       <span class="sep">đến</span>
-      <input type="date" id="f-ngay-to">
+      <input type="date" id="f-tao-to">
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Ngày khởi phát / Nhập viện:</span>
+      <input type="date" id="f-kp-from">
+      <span class="sep">đến</span>
+      <input type="date" id="f-kp-to">
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Ngày sinh:</span>
+      <input type="date" id="f-ns-from">
+      <span class="sep">đến</span>
+      <input type="date" id="f-ns-to">
     </div>
     <button class="btn-reset" id="btn-reset">↺ Xóa bộ lọc</button>
   </div>
@@ -141,7 +153,11 @@ tbody td.col-tinh.xa-name {
   var COL_BENH = 'ten_benh';
   var COL_MAC  = 'tong_so';
   var COL_CHET = 'tu_vong';
-  var COL_NGAY = 'ngay_su_kien';   // cột ngày dùng để lọc theo khoảng thời gian
+  // 3 cột ngày dùng để lọc theo khoảng thời gian — giống epi_report.html
+  var COL_NGAY_TAO  = 'ngay_tao';
+  var COL_NGAY_KP   = 'ngay_khoi_phat';
+  var COL_NGAY_NV   = 'ngay_nhap_vien';   // fallback nếu không có ngay_khoi_phat
+  var COL_NGAY_SINH = 'ngay_sinh';
   // ─────────────────────────────────────────────────────────────────────────────
 
   // ── Phân loại tỉnh theo vùng miền (theo đơn vị hành chính 34 tỉnh/thành từ 07/2025) ──
@@ -376,42 +392,75 @@ tbody td.col-tinh.xa-name {
 
   // ── Rebuild: filter → summarize → render ────────────────────────────────────
   var _state = null;
+
+  var DATE_INPUT_IDS = ['f-tao-from','f-tao-to','f-kp-from','f-kp-to','f-ns-from','f-ns-to'];
+
+  function getFilters() {
+    return {
+      taoFrom: document.getElementById('f-tao-from').value,
+      taoTo:   document.getElementById('f-tao-to').value,
+      kpFrom:  document.getElementById('f-kp-from').value,
+      kpTo:    document.getElementById('f-kp-to').value,
+      nsFrom:  document.getElementById('f-ns-from').value,
+      nsTo:    document.getElementById('f-ns-to').value,
+    };
+  }
+
+  function hasFilter(f) {
+    return !!(f.taoFrom || f.taoTo || f.kpFrom || f.kpTo || f.nsFrom || f.nsTo);
+  }
+
+  function applyFilters(f) {
+    return data.filter(function(r) {
+      if (!inRange(r[COL_NGAY_TAO], f.taoFrom, f.taoTo)) return false;
+      var kp = r[COL_NGAY_KP] || r[COL_NGAY_NV];
+      if (!inRange(kp, f.kpFrom, f.kpTo)) return false;
+      if (!inRange(r[COL_NGAY_SINH], f.nsFrom, f.nsTo)) return false;
+      return true;
+    });
+  }
+
   function rebuild() {
-    var from = document.getElementById('f-ngay-from').value;
-    var to   = document.getElementById('f-ngay-to').value;
-    ['f-ngay-from', 'f-ngay-to'].forEach(function(id) {
+    var f = getFilters();
+    DATE_INPUT_IDS.forEach(function(id) {
       var el = document.getElementById(id);
       el.classList.toggle('active', !!el.value);
     });
 
-    _rows  = (from || to) ? data.filter(function(r) { return inRange(r[COL_NGAY], from, to); }) : data;
+    _rows  = hasFilter(f) ? applyFilters(f) : data;
     _state = summarize(_rows);
     buildTable(_state);
 
     var stat = document.getElementById('stat-text');
-    var hasFilter = !!(from || to);
-    stat.innerHTML = hasFilter
+    stat.innerHTML = hasFilter(f)
       ? '<span class="stat-badge">' + _rows.length.toLocaleString('vi-VN') + '</span> dòng / tổng ' + data.length.toLocaleString('vi-VN')
       : _rows.length.toLocaleString('vi-VN') + ' dòng';
   }
 
   document.getElementById('btn-reset').addEventListener('click', function() {
-    document.getElementById('f-ngay-from').value = '';
-    document.getElementById('f-ngay-to').value   = '';
+    DATE_INPUT_IDS.forEach(function(id) { document.getElementById(id).value = ''; });
     rebuild();
   });
 
-  var fromEl = document.getElementById('f-ngay-from');
-  var toEl   = document.getElementById('f-ngay-to');
-  fromEl.addEventListener('change', function() {
-    toEl.min = fromEl.value || '';
-    if (toEl.value && toEl.value < fromEl.value) toEl.value = fromEl.value;
-    rebuild();
-  });
-  toEl.addEventListener('change', function() {
-    fromEl.max = toEl.value || '';
-    if (fromEl.value && fromEl.value > toEl.value) fromEl.value = toEl.value;
-    rebuild();
+  // Mỗi cặp ngày: đến ngày luôn >= từ ngày
+  var datePairs = [
+    ['f-tao-from', 'f-tao-to'],
+    ['f-kp-from',  'f-kp-to'],
+    ['f-ns-from',  'f-ns-to'],
+  ];
+  datePairs.forEach(function(pair) {
+    var fromEl = document.getElementById(pair[0]);
+    var toEl   = document.getElementById(pair[1]);
+    fromEl.addEventListener('change', function() {
+      toEl.min = fromEl.value || '';
+      if (toEl.value && toEl.value < fromEl.value) toEl.value = fromEl.value;
+      rebuild();
+    });
+    toEl.addEventListener('change', function() {
+      fromEl.max = toEl.value || '';
+      if (fromEl.value && fromEl.value > toEl.value) fromEl.value = toEl.value;
+      rebuild();
+    });
   });
 
   // ── Ghi .xlsx thuần JS (không phụ thuộc CDN) ─────────────────────────────────
