@@ -1,7 +1,32 @@
 <style>
 html, body { margin: 0; padding: 0; overflow: hidden; }
-.host { display: flex; flex-direction: column; width: 100%; height: 100%; }
-.toolbar { display: flex; align-items: center; justify-content: flex-start; padding: 4px 6px; flex-shrink: 0; }
+.host { display: flex; flex-direction: column; width: 100%; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+/* ── Filter panel (giống epi_report.html, rút gọn còn 1 khoảng ngày) ── */
+.filter-panel {
+  flex-shrink: 0; background: #f6f8fa; border-bottom: 2px solid #d0d7de;
+  padding: 7px 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.filter-section-title {
+  font-size: 10px; font-weight: 700; color: #4276A4; text-transform: uppercase;
+  letter-spacing: .4px; white-space: nowrap;
+}
+.filter-group { display: flex; align-items: center; gap: 5px; }
+.filter-label { font-size: 11px; color: #555; white-space: nowrap; font-weight: 500; }
+.filter-panel input[type="date"] {
+  padding: 2px 6px; border: 1px solid #bbb; border-radius: 4px;
+  font-size: 12px; color: #333; background: #fff; height: 26px; font-family: inherit;
+}
+.filter-panel input:focus { outline: none; border-color: #4276A4; }
+.filter-panel input.active { border-color: #1a73e8; background: #e8f0fe; }
+.sep { color: #888; font-size: 11px; }
+.btn-reset {
+  padding: 2px 10px; border: 1px solid #bbb; border-radius: 4px;
+  background: #fff; cursor: pointer; font-size: 11px; color: #555; height: 26px;
+  font-family: inherit; margin-left: auto;
+}
+.btn-reset:hover { background: #fee2e2; border-color: #f87171; color: #b91c1c; }
+
 .wrap { flex: 1; overflow: auto; border: 1px solid #d0d7de; }
 
 table {
@@ -34,6 +59,16 @@ tbody td.col-tinh { position: sticky; left: 36px; z-index: 2; }
 tbody tr.grand-total td { background: #fff4d6; font-weight: bold; color: #5a4500; border-bottom: 2px solid #d39c00; }
 tbody tr.grand-total td.col-tinh { background: #fff4d6; border-right: 2px solid #d39c00; cursor: default; text-align: left; }
 
+/* Vùng miền */
+tbody tr.vung-row td { background: #e3f3ea; font-weight: 700; color: #1e5c3f; }
+tbody td.col-tinh.vung-name {
+  text-align: left; cursor: pointer; user-select: none;
+  border-right: 2px solid #2e7d5b;
+}
+tbody td.col-tinh.vung-name:hover { background: #d1ebdd; }
+tbody tr.vung-row:hover td { background: #d9f0e3 !important; }
+tbody tr.vung-row:hover td.vung-name { background: #c8e8d7 !important; }
+
 /* Tỉnh row */
 tbody tr.tinh-row td { background: #eef5fb; font-weight: 600; }
 tbody tr.tinh-row:hover td { background: #e6f2ff !important; }
@@ -43,6 +78,7 @@ tbody td.col-tinh.dia-phuong {
 }
 tbody td.col-tinh.dia-phuong:hover { background: #d8ebf7; }
 tbody tr.tinh-row:hover td.dia-phuong { background: #cce5f5 !important; }
+.indent-1 { padding-left: 22px !important; }
 
 /* Xã row */
 tbody tr.xa-row td { background: #f8fbff; font-weight: 400; }
@@ -51,27 +87,49 @@ tbody td.col-tinh.xa-name {
   text-align: left; padding-left: 28px; font-weight: 400;
   border-right: 2px solid #4276A4; background: #f8fbff;
 }
+.indent-2 { padding-left: 42px !important; }
 
 .mac  { color: #1976d2; font-variant-numeric: tabular-nums; }
 .chet { color: #d32f2f; font-variant-numeric: tabular-nums; }
 
 .expand-icon { display: inline-block; width: 16px; font-size: 10px; transition: transform .15s; }
+.vung-row.expanded .expand-icon,
 .tinh-row.expanded .expand-icon { transform: rotate(90deg); }
 
+.footer {
+  flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px; border-top: 1px solid #d0d7de; background: #f6f8fa;
+}
 .btn-export {
   padding: 4px 12px; border: none; border-radius: 4px;
   background: #217346; color: #fff; cursor: pointer;
   font-size: 12px; font-weight: 600; line-height: 1.5; font-family: inherit;
 }
 .btn-export:hover { background: #185c38; }
+.stat-badge { padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 700; background: #dbeafe; color: #1d4ed8; }
+.stat-text { font-size: 11px; color: #666; }
 </style>
 
 <div class="host">
+  <!-- Filter panel: khoảng thời gian, giống epi_report.html -->
+  <div class="filter-panel">
+    <span class="filter-section-title">Thời gian</span>
+    <div class="filter-group">
+      <span class="filter-label">Từ ngày:</span>
+      <input type="date" id="f-ngay-from">
+      <span class="sep">đến</span>
+      <input type="date" id="f-ngay-to">
+    </div>
+    <button class="btn-reset" id="btn-reset">↺ Xóa bộ lọc</button>
+  </div>
+
   <div class="wrap">
     <table id="tbl"></table>
   </div>
-  <div class="toolbar">
+
+  <div class="footer">
     <button class="btn-export" id="btn-export">⬇ Excel</button>
+    <span class="stat-text" id="stat-text"></span>
   </div>
 </div>
 
@@ -83,7 +141,34 @@ tbody td.col-tinh.xa-name {
   var COL_BENH = 'ten_benh';
   var COL_MAC  = 'tong_so';
   var COL_CHET = 'tu_vong';
+  var COL_NGAY = 'ngay_su_kien';   // cột ngày dùng để lọc theo khoảng thời gian
   // ─────────────────────────────────────────────────────────────────────────────
+
+  // ── Phân loại tỉnh theo vùng miền (theo đơn vị hành chính 34 tỉnh/thành từ 07/2025) ──
+  // Miền Bắc (18, tính đến Hà Tĩnh) / Miền Trung (5) / Tây Nguyên (3) / Miền Nam (còn lại, 8)
+  var REGION_MAP = {
+    'Cao Bằng': 'Miền Bắc', 'Điện Biên': 'Miền Bắc', 'Lai Châu': 'Miền Bắc', 'Sơn La': 'Miền Bắc',
+    'Lào Cai': 'Miền Bắc', 'Tuyên Quang': 'Miền Bắc', 'Thái Nguyên': 'Miền Bắc', 'Phú Thọ': 'Miền Bắc',
+    'Bắc Ninh': 'Miền Bắc', 'Hưng Yên': 'Miền Bắc', 'Ninh Bình': 'Miền Bắc', 'Quảng Ninh': 'Miền Bắc',
+    'Lạng Sơn': 'Miền Bắc', 'Hà Nội': 'Miền Bắc', 'Hải Phòng': 'Miền Bắc', 'Thanh Hóa': 'Miền Bắc',
+    'Nghệ An': 'Miền Bắc', 'Hà Tĩnh': 'Miền Bắc',
+
+    'Quảng Trị': 'Miền Trung', 'Huế': 'Miền Trung', 'Đà Nẵng': 'Miền Trung',
+    'Quảng Ngãi': 'Miền Trung', 'Khánh Hòa': 'Miền Trung',
+
+    'Gia Lai': 'Tây Nguyên', 'Đắk Lắk': 'Tây Nguyên', 'Lâm Đồng': 'Tây Nguyên',
+
+    'Hồ Chí Minh': 'Miền Nam', 'Đồng Nai': 'Miền Nam', 'Tây Ninh': 'Miền Nam', 'Cần Thơ': 'Miền Nam',
+    'Vĩnh Long': 'Miền Nam', 'Đồng Tháp': 'Miền Nam', 'An Giang': 'Miền Nam', 'Cà Mau': 'Miền Nam',
+  };
+  var REGION_ORDER = ['Miền Bắc', 'Miền Trung', 'Tây Nguyên', 'Miền Nam'];
+
+  function bareName(name) {
+    return String(name || '').replace(/^(Tỉnh|Thành phố|TP\.?)\s+/i, '').trim();
+  }
+  function regionOf(tinhName) {
+    return REGION_MAP[bareName(tinhName)] || null;
+  }
 
   var data = window.__chartData || window.DATA || [];
 
@@ -100,170 +185,492 @@ tbody td.col-tinh.xa-name {
   function emptyD() { return { mac: 0, chet: 0 }; }
   var fmt = function(n){ return (+n||0).toLocaleString('vi-VN'); };
 
-  // ── Tổng hợp dữ liệu ────────────────────────────────────────────────────────
-  var benhSet = [];
-  var byTinh  = {};   // ten_tinh → { benh→{mac,chet}, xas→{ xa→{ benh→{mac,chet} } }, xOrder→[] }
-  var tinhSet = [];
+  // ── Filter theo khoảng thời gian ─────────────────────────────────────────────
+  function toMs(v) {
+    if (!v) return null;
+    var n = +v;
+    if (!isNaN(n) && n > 1e10) return n;
+    if (!isNaN(n) && n > 1e7)  return n * 1000;
+    var d = new Date(v);
+    return isNaN(d.getTime()) ? null : d.getTime();
+  }
+  function inRange(val, from, to) {
+    if (!from && !to) return true;
+    var t = toMs(val);
+    if (t === null) return true;
+    if (from && t < new Date(from).getTime()) return false;
+    if (to   && t > new Date(to + 'T23:59:59').getTime()) return false;
+    return true;
+  }
 
-  data.forEach(function(r) {
-    var t = r[COL_TINH] || '(?)';
-    var x = r[COL_XA]   || '';
-    var b = r[COL_BENH]  || '(?)';
-
-    if (!byTinh[t]) { byTinh[t] = { benh: {}, xas: {}, xOrder: [] }; tinhSet.push(t); }
-    if (x && !byTinh[t].xas[x]) { byTinh[t].xas[x] = {}; byTinh[t].xOrder.push(x); }
-    if (benhSet.indexOf(b) < 0) benhSet.push(b);
-
-    if (!byTinh[t].benh[b]) byTinh[t].benh[b] = emptyD();
-    byTinh[t].benh[b].mac  += num(r, COL_MAC);
-    byTinh[t].benh[b].chet += num(r, COL_CHET);
-
-    if (x) {
-      if (!byTinh[t].xas[x][b]) byTinh[t].xas[x][b] = emptyD();
-      byTinh[t].xas[x][b].mac  += num(r, COL_MAC);
-      byTinh[t].xas[x][b].chet += num(r, COL_CHET);
-    }
-  });
-
-  var benhs = benhSet.sort();
-  var tinhs = tinhSet.sort();
-
-  // Tổng cộng
-  var grand = {};
-  benhs.forEach(function(b) {
-    grand[b] = emptyD();
-    tinhs.forEach(function(t) {
-      var d = byTinh[t].benh[b];
-      if (d) { grand[b].mac += d.mac; grand[b].chet += d.chet; }
-    });
-  });
-
-  // ── Build table ──────────────────────────────────────────────────────────────
   var tbl = document.getElementById('tbl');
+  var _rows = []; // filtered rows hiện tại — dùng lại khi export
 
-  // Header row 1: # | Địa phương | Tên bệnh (colspan 2)...
-  var r1 = '<tr>'
-    + '<th class="col-stt"  rowspan="3">#</th>'
-    + '<th class="col-tinh" rowspan="3">Địa phương</th>';
-  benhs.forEach(function(b) {
-    r1 += '<th colspan="2">' + b + '</th>';
-  });
-  r1 += '</tr>';
+  // ── Tổng hợp dữ liệu từ 1 tập rows (đã filter) ──────────────────────────────
+  function summarize(rows) {
+    var benhSet = [];
+    var byTinh  = {};   // ten_tinh → { benh→{mac,chet}, xas→{ xa→{ benh→{mac,chet} } }, xOrder→[] }
+    var tinhSet = [];
 
-  // Header row 2: số thứ tự bệnh
-  var r2 = '<tr>';
-  benhs.forEach(function(b, i) {
-    r2 += '<th colspan="2">(' + (i+1) + ')</th>';
-  });
-  r2 += '</tr>';
+    rows.forEach(function(r) {
+      var t = r[COL_TINH] || '(?)';
+      var x = r[COL_XA]   || '';
+      var b = r[COL_BENH]  || '(?)';
 
-  // Header row 3: Mắc | Chết
-  var r3 = '<tr>';
-  benhs.forEach(function() { r3 += '<th>Mắc</th><th>Chết</th>'; });
-  r3 += '</tr>';
+      if (!byTinh[t]) { byTinh[t] = { benh: {}, xas: {}, xOrder: [] }; tinhSet.push(t); }
+      if (x && !byTinh[t].xas[x]) { byTinh[t].xas[x] = {}; byTinh[t].xOrder.push(x); }
+      if (benhSet.indexOf(b) < 0) benhSet.push(b);
 
-  function benhCells(benhMap) {
-    return benhs.map(function(b) {
+      if (!byTinh[t].benh[b]) byTinh[t].benh[b] = emptyD();
+      byTinh[t].benh[b].mac  += num(r, COL_MAC);
+      byTinh[t].benh[b].chet += num(r, COL_CHET);
+
+      if (x) {
+        if (!byTinh[t].xas[x][b]) byTinh[t].xas[x][b] = emptyD();
+        byTinh[t].xas[x][b].mac  += num(r, COL_MAC);
+        byTinh[t].xas[x][b].chet += num(r, COL_CHET);
+      }
+    });
+
+    var benhs = benhSet.sort();
+    var tinhs = tinhSet.sort();
+
+    var grand = {};
+    benhs.forEach(function(b) {
+      grand[b] = emptyD();
+      tinhs.forEach(function(t) {
+        var d = byTinh[t].benh[b];
+        if (d) { grand[b].mac += d.mac; grand[b].chet += d.chet; }
+      });
+    });
+
+    // Gom tỉnh theo vùng miền
+    var byRegion = {};
+    tinhs.forEach(function(t) {
+      var reg = regionOf(t) || 'Khác';
+      if (!byRegion[reg]) byRegion[reg] = [];
+      byRegion[reg].push(t);
+    });
+    var presentRegions = REGION_ORDER.filter(function(r) { return byRegion[r] && byRegion[r].length; });
+    if (byRegion['Khác'] && byRegion['Khác'].length) presentRegions.push('Khác');
+    var showRegions = presentRegions.length >= 2;
+
+    return { benhs: benhs, tinhs: tinhs, byTinh: byTinh, grand: grand, byRegion: byRegion, presentRegions: presentRegions, showRegions: showRegions };
+  }
+
+  function regionTotals(state, tinhList) {
+    var totals = {};
+    state.benhs.forEach(function(b) {
+      totals[b] = emptyD();
+      tinhList.forEach(function(t) {
+        var d = state.byTinh[t].benh[b];
+        if (d) { totals[b].mac += d.mac; totals[b].chet += d.chet; }
+      });
+    });
+    return totals;
+  }
+
+  function benhCells(state, benhMap) {
+    return state.benhs.map(function(b) {
       var d = benhMap[b] || emptyD();
       return '<td class="mac">' + fmt(d.mac) + '</td><td class="chet">' + fmt(d.chet) + '</td>';
     }).join('');
   }
 
-  var tbody = '<tbody>';
+  // ── Build table ──────────────────────────────────────────────────────────────
+  function buildTable(state) {
+    var r1 = '<tr>'
+      + '<th class="col-stt"  rowspan="3">#</th>'
+      + '<th class="col-tinh" rowspan="3">Địa phương</th>';
+    state.benhs.forEach(function(b) { r1 += '<th colspan="2">' + b + '</th>'; });
+    r1 += '</tr>';
 
-  // Dòng Tổng cộng
-  tbody += '<tr class="grand-total">'
-         + '<td class="col-stt"></td>'
-         + '<td class="col-tinh">Tổng cộng</td>'
-         + benhCells(grand) + '</tr>';
+    var r2 = '<tr>';
+    state.benhs.forEach(function(b, i) { r2 += '<th colspan="2">(' + (i+1) + ')</th>'; });
+    r2 += '</tr>';
 
-  // Tỉnh + xã
-  tinhs.forEach(function(t, i) {
-    var tinhId = 'tinh-' + i;
-    var tinh   = byTinh[t];
-    tbody += '<tr class="tinh-row" data-id="' + tinhId + '">'
-           + '<td class="col-stt">' + (i+1) + '</td>'
-           + '<td class="col-tinh dia-phuong"><span class="expand-icon">▶</span>' + t + '</td>'
-           + benhCells(tinh.benh) + '</tr>';
+    var r3 = '<tr>';
+    state.benhs.forEach(function() { r3 += '<th>Mắc</th><th>Chết</th>'; });
+    r3 += '</tr>';
 
-    tinh.xOrder.slice().sort().forEach(function(x) {
-      tbody += '<tr class="xa-row" data-tinh="' + tinhId + '" style="display:none">'
-             + '<td class="col-stt"></td>'
-             + '<td class="col-tinh xa-name">' + x + '</td>'
-             + benhCells(tinh.xas[x]) + '</tr>';
+    var tbody = '<tbody>';
+    tbody += '<tr class="grand-total">'
+           + '<td class="col-stt"></td>'
+           + '<td class="col-tinh">Tổng cộng</td>'
+           + benhCells(state, state.grand) + '</tr>';
+
+    function tinhRow(t, i, idPrefix, indent) {
+      var tinhId = idPrefix + 'tinh-' + i;
+      var tinh   = state.byTinh[t];
+      var html = '<tr class="tinh-row" data-id="' + tinhId + '"'
+               + (indent ? ' data-vung="' + indent.vungId + '"' : '') + '>'
+               + '<td class="col-stt">' + (i+1) + '</td>'
+               + '<td class="col-tinh dia-phuong' + (indent ? ' indent-1' : '') + '">'
+               + '<span class="expand-icon">▶</span>' + t + '</td>'
+               + benhCells(state, tinh.benh) + '</tr>';
+      tinh.xOrder.slice().sort().forEach(function(x) {
+        html += '<tr class="xa-row" data-tinh="' + tinhId + '"'
+              + (indent ? ' data-vung="' + indent.vungId + '"' : '')
+              + ' style="display:none">'
+              + '<td class="col-stt"></td>'
+              + '<td class="col-tinh xa-name' + (indent ? ' indent-2' : '') + '">' + x + '</td>'
+              + benhCells(state, tinh.xas[x]) + '</tr>';
+      });
+      return html;
+    }
+
+    if (state.showRegions) {
+      state.presentRegions.forEach(function(region, ri) {
+        var vungId = 'vung-' + ri;
+        var regionTinhs = state.byRegion[region].slice().sort();
+        tbody += '<tr class="vung-row expanded" data-id="' + vungId + '">'
+               + '<td class="col-stt"></td>'
+               + '<td class="col-tinh vung-name"><span class="expand-icon">▶</span>' + region + '</td>'
+               + benhCells(state, regionTotals(state, regionTinhs)) + '</tr>';
+        regionTinhs.forEach(function(t, i) {
+          tbody += tinhRow(t, i, vungId + '-', { vungId: vungId });
+        });
+      });
+    } else {
+      state.tinhs.forEach(function(t, i) { tbody += tinhRow(t, i, '', null); });
+    }
+    tbody += '</tbody>';
+
+    tbl.innerHTML = '<thead>' + r1 + r2 + r3 + '</thead>' + tbody;
+
+    // Sticky top động
+    var offset = 0;
+    tbl.querySelectorAll('thead tr').forEach(function(row) {
+      row.querySelectorAll('th').forEach(function(th) { th.style.top = offset + 'px'; });
+      offset += row.offsetHeight;
     });
-  });
-  tbody += '</tbody>';
 
-  tbl.innerHTML = '<thead>' + r1 + r2 + r3 + '</thead>' + tbody;
-
-  // Sticky top động
-  var offset = 0;
-  tbl.querySelectorAll('thead tr').forEach(function(row) {
-    row.querySelectorAll('th').forEach(function(th) { th.style.top = offset + 'px'; });
-    offset += row.offsetHeight;
-  });
-
-  // Expand/collapse
-  tbl.querySelectorAll('.tinh-row').forEach(function(row) {
-    row.addEventListener('click', function() {
-      var id       = this.dataset.id;
-      var expanded = this.classList.toggle('expanded');
-      tbl.querySelectorAll('.xa-row[data-tinh="' + id + '"]').forEach(function(r) {
-        r.style.display = expanded ? 'table-row' : 'none';
+    // Vùng: click để mở/đóng toàn bộ tỉnh (và xã đang mở) bên trong
+    tbl.querySelectorAll('.vung-row').forEach(function(row) {
+      row.addEventListener('click', function() {
+        var id = row.dataset.id;
+        var expanded = row.classList.toggle('expanded');
+        tbl.querySelectorAll('tr.tinh-row[data-vung="' + id + '"]').forEach(function(tr) {
+          tr.style.display = expanded ? 'table-row' : 'none';
+        });
+        tbl.querySelectorAll('tr.xa-row[data-vung="' + id + '"]').forEach(function(xr) {
+          if (!expanded) { xr.style.display = 'none'; return; }
+          var tinhRow = tbl.querySelector('tr.tinh-row[data-id="' + xr.dataset.tinh + '"]');
+          xr.style.display = (tinhRow && tinhRow.classList.contains('expanded')) ? 'table-row' : 'none';
+        });
       });
     });
+
+    // Tỉnh: click để mở/đóng xã
+    tbl.querySelectorAll('.tinh-row').forEach(function(row) {
+      row.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var id       = this.dataset.id;
+        var expanded = this.classList.toggle('expanded');
+        tbl.querySelectorAll('.xa-row[data-tinh="' + id + '"]').forEach(function(r) {
+          r.style.display = expanded ? 'table-row' : 'none';
+        });
+      });
+    });
+  }
+
+  // ── Rebuild: filter → summarize → render ────────────────────────────────────
+  var _state = null;
+  function rebuild() {
+    var from = document.getElementById('f-ngay-from').value;
+    var to   = document.getElementById('f-ngay-to').value;
+    ['f-ngay-from', 'f-ngay-to'].forEach(function(id) {
+      var el = document.getElementById(id);
+      el.classList.toggle('active', !!el.value);
+    });
+
+    _rows  = (from || to) ? data.filter(function(r) { return inRange(r[COL_NGAY], from, to); }) : data;
+    _state = summarize(_rows);
+    buildTable(_state);
+
+    var stat = document.getElementById('stat-text');
+    var hasFilter = !!(from || to);
+    stat.innerHTML = hasFilter
+      ? '<span class="stat-badge">' + _rows.length.toLocaleString('vi-VN') + '</span> dòng / tổng ' + data.length.toLocaleString('vi-VN')
+      : _rows.length.toLocaleString('vi-VN') + ' dòng';
+  }
+
+  document.getElementById('btn-reset').addEventListener('click', function() {
+    document.getElementById('f-ngay-from').value = '';
+    document.getElementById('f-ngay-to').value   = '';
+    rebuild();
   });
 
-  // ── Export CSV ───────────────────────────────────────────────────────────────
+  var fromEl = document.getElementById('f-ngay-from');
+  var toEl   = document.getElementById('f-ngay-to');
+  fromEl.addEventListener('change', function() {
+    toEl.min = fromEl.value || '';
+    if (toEl.value && toEl.value < fromEl.value) toEl.value = fromEl.value;
+    rebuild();
+  });
+  toEl.addEventListener('change', function() {
+    fromEl.max = toEl.value || '';
+    if (fromEl.value && fromEl.value > toEl.value) fromEl.value = toEl.value;
+    rebuild();
+  });
+
+  // ── Ghi .xlsx thuần JS (không phụ thuộc CDN) ─────────────────────────────────
+  // Dashboard CSP thường chỉ cho phép script-src 'self' 'unsafe-inline' — không
+  // load được thư viện ngoài (vd SheetJS qua CDN). Nên tự dựng file .xlsx tối
+  // giản: OOXML (vài file XML) nén dạng "stored" (không nén) trong 1 file ZIP.
+
+  function xmlEscape(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&apos;' }[c];
+    });
+  }
+
+  function colLetter(i) {
+    var s = '';
+    i += 1;
+    while (i > 0) { var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); }
+    return s;
+  }
+
+  function crc32(bytes) {
+    var table = crc32._table || (crc32._table = (function () {
+      var t = [];
+      for (var n = 0; n < 256; n++) {
+        var c = n;
+        for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        t[n] = c >>> 0;
+      }
+      return t;
+    })());
+    var crc = 0xFFFFFFFF;
+    for (var i = 0; i < bytes.length; i++) crc = table[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  // ZIP tối giản — mọi entry dùng method 0 (stored / không nén)
+  function buildZip(files) {
+    var enc = new TextEncoder();
+    var localChunks = [];
+    var centralChunks = [];
+    var offset = 0;
+
+    files.forEach(function (f) {
+      var nameBytes = enc.encode(f.name);
+      var data      = enc.encode(f.content);
+      var crc       = crc32(data);
+      var size      = data.length;
+
+      var local = new Uint8Array(30 + nameBytes.length);
+      var lv = new DataView(local.buffer);
+      lv.setUint32(0, 0x04034b50, true);
+      lv.setUint16(4, 20, true);
+      lv.setUint16(6, 0, true);
+      lv.setUint16(8, 0, true);
+      lv.setUint16(10, 0, true);
+      lv.setUint16(12, 0, true);
+      lv.setUint32(14, crc, true);
+      lv.setUint32(18, size, true);
+      lv.setUint32(22, size, true);
+      lv.setUint16(26, nameBytes.length, true);
+      lv.setUint16(28, 0, true);
+      local.set(nameBytes, 30);
+      localChunks.push(local, data);
+
+      var central = new Uint8Array(46 + nameBytes.length);
+      var cv = new DataView(central.buffer);
+      cv.setUint32(0, 0x02014b50, true);
+      cv.setUint16(4, 20, true);
+      cv.setUint16(6, 20, true);
+      cv.setUint16(8, 0, true);
+      cv.setUint16(10, 0, true);
+      cv.setUint16(12, 0, true);
+      cv.setUint16(14, 0, true);
+      cv.setUint32(16, crc, true);
+      cv.setUint32(20, size, true);
+      cv.setUint32(24, size, true);
+      cv.setUint16(28, nameBytes.length, true);
+      cv.setUint16(30, 0, true);
+      cv.setUint16(32, 0, true);
+      cv.setUint16(34, 0, true);
+      cv.setUint16(36, 0, true);
+      cv.setUint32(38, 0, true);
+      cv.setUint32(42, offset, true);
+      central.set(nameBytes, 46);
+      centralChunks.push(central);
+
+      offset += local.length + data.length;
+    });
+
+    var centralSize   = centralChunks.reduce(function (s, p) { return s + p.length; }, 0);
+    var centralOffset = offset;
+
+    var end = new Uint8Array(22);
+    var ev = new DataView(end.buffer);
+    ev.setUint32(0, 0x06054b50, true);
+    ev.setUint16(4, 0, true);
+    ev.setUint16(6, 0, true);
+    ev.setUint16(8, files.length, true);
+    ev.setUint16(10, files.length, true);
+    ev.setUint32(12, centralSize, true);
+    ev.setUint32(16, centralOffset, true);
+    ev.setUint16(20, 0, true);
+
+    return new Blob(localChunks.concat(centralChunks, [end]), {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+  }
+
+  function buildXlsxBlob(rowsAoa, merges, colWidths) {
+    var sheetRows = rowsAoa.map(function (row, r) {
+      var cells = row.map(function (v, c) {
+        var ref = colLetter(c) + (r + 1);
+        if (v === '' || v == null) return '';
+        if (typeof v === 'number' && !isNaN(v)) {
+          return '<c r="' + ref + '"><v>' + v + '</v></c>';
+        }
+        return '<c r="' + ref + '" t="inlineStr"><is><t xml:space="preserve">' + xmlEscape(v) + '</t></is></c>';
+      }).join('');
+      return '<row r="' + (r + 1) + '">' + cells + '</row>';
+    }).join('');
+
+    var mergeXml = '';
+    if (merges && merges.length) {
+      mergeXml = '<mergeCells count="' + merges.length + '">' + merges.map(function (m) {
+        return '<mergeCell ref="' + colLetter(m.c1) + (m.r1 + 1) + ':' + colLetter(m.c2) + (m.r2 + 1) + '"/>';
+      }).join('') + '</mergeCells>';
+    }
+
+    var colsXml = '';
+    if (colWidths && colWidths.length) {
+      colsXml = '<cols>' + colWidths.map(function (w, i) {
+        return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>';
+      }).join('') + '</cols>';
+    }
+
+    var sheetXml =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      colsXml +
+      '<sheetData>' + sheetRows + '</sheetData>' +
+      mergeXml +
+      '</worksheet>';
+
+    var contentTypesXml =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+      '</Types>';
+
+    var rootRelsXml =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+      '</Relationships>';
+
+    var workbookXml =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
+      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+      '<sheets><sheet name="Theo benh" sheetId="1" r:id="rId1"/></sheets>' +
+      '</workbook>';
+
+    var workbookRelsXml =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+      '</Relationships>';
+
+    var stylesXml =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>' +
+      '<fills count="1"><fill><patternFill patternType="none"/></fill></fills>' +
+      '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>' +
+      '</styleSheet>';
+
+    return buildZip([
+      { name: '[Content_Types].xml', content: contentTypesXml },
+      { name: '_rels/.rels', content: rootRelsXml },
+      { name: 'xl/workbook.xml', content: workbookXml },
+      { name: 'xl/_rels/workbook.xml.rels', content: workbookRelsXml },
+      { name: 'xl/styles.xml', content: stylesXml },
+      { name: 'xl/worksheets/sheet1.xml', content: sheetXml },
+    ]);
+  }
+
+  // ── Export Excel (.xlsx) ─────────────────────────────────────────────────────
   document.getElementById('btn-export').addEventListener('click', function() {
-    var rows = [];
-    var hdr  = ['#', 'Địa phương'];
-    benhs.forEach(function(b, i) {
-      hdr.push(b + ' (' + (i+1) + ') - Mắc', b + ' (' + (i+1) + ') - Chết');
-    });
-    rows.push(hdr);
+    if (!_state) return;
+    var state = _state;
 
-    // Tổng cộng
-    var gRow = ['', 'Tổng cộng'];
-    benhs.forEach(function(b) {
-      var d = grand[b] || emptyD();
-      gRow.push(d.mac, d.chet);
+    var hdr1 = ['#', 'Địa phương'];
+    var hdr2 = ['', ''];
+    var hdr3 = ['', ''];
+    state.benhs.forEach(function(b, i) {
+      hdr1.push(b, '');
+      hdr2.push('(' + (i+1) + ')', '');
+      hdr3.push('Mắc', 'Chết');
     });
-    rows.push(gRow);
+    var rows = [hdr1, hdr2, hdr3];
 
-    tinhs.forEach(function(t, i) {
-      var tinh = byTinh[t];
-      var row  = [i+1, t];
-      benhs.forEach(function(b) {
-        var d = tinh.benh[b] || emptyD();
+    function pushDataRow(name, benhMap, numCol) {
+      var row = [numCol != null ? numCol : '', name];
+      state.benhs.forEach(function(b) {
+        var d = benhMap[b] || emptyD();
         row.push(d.mac, d.chet);
       });
       rows.push(row);
+    }
 
-      tinh.xOrder.slice().sort().forEach(function(x) {
-        var xrow = ['', '  ' + x];
-        benhs.forEach(function(b) {
-          var d = tinh.xas[x][b] || emptyD();
-          xrow.push(d.mac, d.chet);
+    pushDataRow('Tổng cộng', state.grand, '');
+
+    if (state.showRegions) {
+      state.presentRegions.forEach(function(region) {
+        var regionTinhs = state.byRegion[region].slice().sort();
+        pushDataRow(region, regionTotals(state, regionTinhs), '');
+        regionTinhs.forEach(function(t, i) {
+          pushDataRow(t, state.byTinh[t].benh, i + 1);
+          state.byTinh[t].xOrder.slice().sort().forEach(function(x) {
+            pushDataRow('  ' + x, state.byTinh[t].xas[x], '');
+          });
         });
-        rows.push(xrow);
       });
+    } else {
+      state.tinhs.forEach(function(t, i) {
+        pushDataRow(t, state.byTinh[t].benh, i + 1);
+        state.byTinh[t].xOrder.slice().sort().forEach(function(x) {
+          pushDataRow('  ' + x, state.byTinh[t].xas[x], '');
+        });
+      });
+    }
+
+    // Merge header: # / Địa phương xuống 3 hàng, mỗi bệnh gộp 2 cột trên 2 hàng đầu
+    var merges = [
+      { r1: 0, c1: 0, r2: 2, c2: 0 },
+      { r1: 0, c1: 1, r2: 2, c2: 1 },
+    ];
+    state.benhs.forEach(function(_, i) {
+      var c = 2 + i * 2;
+      merges.push({ r1: 0, c1: c, r2: 0, c2: c + 1 });
+      merges.push({ r1: 1, c1: c, r2: 1, c2: c + 1 });
     });
+    var colWidths = [4, 26].concat(state.benhs.flatMap(function () { return [10, 10]; }));
 
-    var csv = rows.map(function(r) {
-      return r.map(function(v) {
-        var s = String(v == null ? '' : v);
-        return (s.indexOf(',') >= 0 || s.indexOf('"') >= 0)
-          ? '"' + s.replace(/"/g,'""') + '"' : s;
-      }).join(',');
-    }).join('\r\n');
-
-    var blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    var blob = buildXlsxBlob(rows, merges, colWidths);
     var url  = URL.createObjectURL(blob);
-    var a    = document.createElement('a'); a.href = url; a.download = 'disease_table.csv';
+    var a    = document.createElement('a'); a.href = url; a.download = 'disease_table.xlsx';
     document.body.appendChild(a); a.click();
-    document.body.removeChild(a); URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   });
+
+  rebuild();
 })();
 </script>
