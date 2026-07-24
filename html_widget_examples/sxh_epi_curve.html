@@ -177,23 +177,26 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
     var baselineYears = years.filter(function (y) { return y !== currentYear; });
     var yearData = byYear[currentYear] || {};
 
-    // Tuần cuối cùng thực sự có dữ liệu (tránh vẽ thẳng đến tuần 53 khi năm chưa hết
-    // hoặc dataset chưa cập nhật tới đó). Tuần không có ca (mac=0) vẫn cần vẽ đúng vị
-    // trí — vw_ca_benh_tong_hop là view theo từng ca nên tuần 0 ca sẽ không có dòng nào.
+    // Tuần cuối cùng thực sự có dữ liệu của NĂM ĐANG CHỌN (để đường số ca dừng đúng
+    // chỗ, không kéo phẳng về 0 cho các tuần chưa tới). Đường nền dịch tễ (channel)
+    // thì KHÔNG phụ thuộc năm đang chọn còn dữ liệu tới đâu — nó tính từ các năm
+    // nền khác — nên vẫn phải vẽ trọn MAX_WEEKS, chỉ ẩn đường/điểm số ca thật ở các
+    // tuần chưa tới (mac=null, không zero-fill).
     var realWeeks = Object.keys(yearData).map(Number);
     var lastWeek = realWeeks.length ? Math.max.apply(null, realWeeks) : 0;
     var anyWeek = realWeeks[0], anyMs = anyWeek != null ? yearData[anyWeek].tuanMs : null;
 
     var rows = [];
-    for (var w = 1; w <= lastWeek; w++) {
+    for (var w = 1; w <= MAX_WEEKS; w++) {
       var ch = computeChannel(baselineYears, w);
       var cur = yearData[w] || null;
+      var hasHappened = w <= lastWeek;
       var tuanMs = cur ? cur.tuanMs : (anyMs != null ? anyMs + (w - anyWeek) * 7 * 86400000 : null);
       rows.push({
         week: w,
         tuanMs: tuanMs,
-        mac: cur ? cur.mac : 0,
-        chet: cur ? cur.chet : 0,
+        mac: cur ? cur.mac : (hasHappened ? 0 : null),
+        chet: cur ? cur.chet : (hasHappened ? 0 : null),
         channelLow: ch.low,
         channelHigh: ch.high,
         threshold: ch.threshold,
@@ -201,7 +204,7 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
       });
     }
 
-    return { year: currentYear, baselineYears: baselineYears, rows: rows };
+    return { year: currentYear, baselineYears: baselineYears, rows: rows, lastWeek: lastWeek };
   }
 
   // ── Vẽ SVG (line/area chart tự viết, không dùng thư viện ngoài) ────────────────
@@ -298,7 +301,7 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
 
     var overWeeks = rows.filter(function (r) { return r.mac != null && r.mac > r.threshold; }).length;
     document.getElementById('stat-text').textContent =
-      _series.year + ': ' + rows.length + ' tuần có dữ liệu, nền tính từ ' + _series.baselineYears.length + ' năm khác, ' +
+      _series.year + ': ' + _series.lastWeek + ' tuần có dữ liệu, nền tính từ ' + _series.baselineYears.length + ' năm khác, ' +
       overWeeks + ' tuần vượt ngưỡng cảnh báo dịch.';
   }
 
@@ -418,7 +421,7 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
   document.getElementById('btn-export').addEventListener('click', function () {
     if (!_series) return;
     var rows = [['Tuần', 'Ngày đầu tuần', 'Số mắc', 'Tử vong', 'Ngưỡng cảnh báo dịch', 'Số năm nền']];
-    _series.rows.forEach(function (r) {
+    _series.rows.filter(function (r) { return r.mac != null; }).forEach(function (r) {
       rows.push([r.week, fmtDate(r.tuanMs), r.mac, r.chet, Math.round(r.threshold), r.nYears]);
     });
     var blob = buildXlsxBlob(rows);
