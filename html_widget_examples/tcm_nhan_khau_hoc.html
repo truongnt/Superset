@@ -1,0 +1,312 @@
+<style>
+html, body { margin: 0; padding: 0; overflow: hidden; }
+.host { display: flex; flex-direction: column; width: 100%; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+.summary {
+  flex-shrink: 0; display: flex; gap: 10px; padding: 10px 12px;
+  background: #f6f8fa; border-bottom: 2px solid #d0d7de; flex-wrap: wrap;
+}
+.stat-card {
+  flex: 1; min-width: 110px; background: #fff; border: 1px solid #e1e0d9; border-radius: 8px;
+  padding: 10px 14px; text-align: center;
+}
+.stat-card .label { font-size: 11px; color: #52514e; margin-bottom: 4px; }
+.stat-card .value { font-size: 20px; font-weight: 700; color: #0b0b0b; }
+.stat-card .value.critical { color: #d03b3b; }
+
+.body { flex: 1; overflow: auto; padding: 10px 12px; min-height: 0; display: flex; gap: 16px; flex-wrap: wrap; }
+.pyramid-col { flex: 1; min-width: 320px; }
+.table-col { flex: 1; min-width: 320px; }
+
+.pyramid-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; height: 22px; }
+.pyr-side { flex: 1; display: flex; height: 100%; }
+.pyr-left  { justify-content: flex-end; }
+.pyr-right { justify-content: flex-start; }
+.pyr-bar { height: 100%; border-radius: 3px; }
+.pyr-bar.nam { background: #2a78d6; }
+.pyr-bar.nu  { background: #d6609e; }
+.pyr-label { width: 70px; flex-shrink: 0; text-align: center; font-size: 12px; font-weight: 600; color: #0b0b0b; }
+.pyr-val { font-size: 11px; color: #52514e; padding: 0 4px; white-space: nowrap; }
+
+.legend { display: flex; gap: 16px; justify-content: center; margin-bottom: 10px; font-size: 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+th, td {
+  border-right: 1px solid #e1e0d9; border-bottom: 1px solid #e1e0d9;
+  padding: 5px 8px; text-align: center; vertical-align: middle; background: #fff;
+}
+thead th { background: #4276A4; color: #fff; font-weight: 600; }
+td.nhom { text-align: left; font-weight: 600; }
+td.num { font-variant-numeric: tabular-nums; }
+tr.grand-total td { background: #fff4d6; font-weight: bold; color: #5a4500; }
+
+.footer {
+  flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px; border-top: 1px solid #d0d7de; background: #f6f8fa;
+}
+.btn-export {
+  padding: 4px 12px; border: none; border-radius: 4px;
+  background: #217346; color: #fff; cursor: pointer;
+  font-size: 12px; font-weight: 600; line-height: 1.5; font-family: inherit;
+}
+.btn-export:hover { background: #185c38; }
+.note { font-size: 11px; color: #52514e; }
+</style>
+
+<div class="host">
+  <div class="summary" id="summary"></div>
+  <div class="body">
+    <div class="pyramid-col">
+      <div class="legend">
+        <span><i style="background:#2a78d6"></i> Nam</span>
+        <span><i style="background:#d6609e"></i> Nữ</span>
+      </div>
+      <div id="pyramid"></div>
+    </div>
+    <div class="table-col">
+      <table id="tbl"></table>
+    </div>
+  </div>
+  <div class="footer">
+    <button class="btn-export" id="btn-export">⬇ Excel</button>
+    <span class="note" id="note-unknown"></span>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ── Tên cột dataset — nguồn: vw_sxh_danh_sach_ca (dataset gộp cả bảng phân độ) ─
+  var COL_NHOM_TUOI = 'nhom_tuoi';
+  var COL_GIOI_TINH = 'gioi_tinh';
+  var COL_MAC       = 'tong_ca';
+  var COL_CHET      = 'tu_vong';
+
+  // Thứ tự nhóm tuổi trên tháp dân số: già → trẻ (trên → dưới)
+  var AGE_ORDER = ['50+ tuổi', '25-49 tuổi', '15-24 tuổi', '5-14 tuổi', '<5 tuổi'];
+
+  var data = window.__chartData || window.DATA || [];
+  var fmt  = function (n) { return (+n || 0).toLocaleString('vi-VN'); };
+
+  function fitHost() {
+    var host = document.querySelector('.host');
+    if (host) host.style.height = (window.innerHeight || 500) + 'px';
+  }
+  fitHost();
+  window.addEventListener('resize', fitHost);
+
+  function num(r, key) {
+    return +(r[key] || r['SUM__' + key] || r['COUNT__' + key] || 0);
+  }
+
+  // ── Gom dữ liệu theo (nhóm tuổi, giới tính) ────────────────────────────────────
+  var byAge = {}; // age -> { nam:{mac,chet}, nu:{mac,chet}, khac:{mac,chet} }
+  function emptyBucket() { return { mac: 0, chet: 0 }; }
+  function ensureAge(age) {
+    if (!byAge[age]) byAge[age] = { nam: emptyBucket(), nu: emptyBucket(), khac: emptyBucket() };
+    return byAge[age];
+  }
+
+  var unknownAgeMac = 0, totalMac = 0;
+
+  data.forEach(function (r) {
+    var age = r[COL_NHOM_TUOI];
+    var sex = r[COL_GIOI_TINH];
+    var mac = num(r, COL_MAC);
+    var chet = num(r, COL_CHET);
+    totalMac += mac;
+    if (!age) { unknownAgeMac += mac; return; }
+    var bucket = ensureAge(age);
+    var key = sex === 'Nam' ? 'nam' : (sex === 'Nữ' ? 'nu' : 'khac');
+    bucket[key].mac += mac;
+    bucket[key].chet += chet;
+  });
+
+  var rows = AGE_ORDER.map(function (age) {
+    var b = byAge[age] || { nam: emptyBucket(), nu: emptyBucket(), khac: emptyBucket() };
+    var mac = b.nam.mac + b.nu.mac + b.khac.mac;
+    var chet = b.nam.chet + b.nu.chet + b.khac.chet;
+    return { age: age, nam: b.nam, nu: b.nu, khac: b.khac, mac: mac, chet: chet };
+  });
+
+  var grandMac = rows.reduce(function (s, r) { return s + r.mac; }, 0);
+  var grandChet = rows.reduce(function (s, r) { return s + r.chet; }, 0);
+  var grandNam = rows.reduce(function (s, r) { return s + r.nam.mac; }, 0);
+  var grandNu = rows.reduce(function (s, r) { return s + r.nu.mac; }, 0);
+  var grandKhac = rows.reduce(function (s, r) { return s + r.khac.mac; }, 0);
+  var grandCfr = grandMac > 0 ? (grandChet / grandMac * 100) : 0;
+  var maxSide = Math.max.apply(null, rows.map(function (r) { return Math.max(r.nam.mac, r.nu.mac); })) || 1;
+
+  // ── Summary cards ──────────────────────────────────────────────────────────────
+  document.getElementById('summary').innerHTML =
+    '<div class="stat-card"><div class="label">Tổng số ca (đã xác định tuổi)</div><div class="value">' + fmt(grandMac) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Nam / Nữ</div><div class="value">' + fmt(grandNam) + ' / ' + fmt(grandNu) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Không rõ giới tính</div><div class="value">' + (grandMac > 0 ? (grandKhac / grandMac * 100).toFixed(1) : '0') + '%</div></div>' +
+    '<div class="stat-card"><div class="label">CFR chung</div><div class="value critical">' + grandCfr.toFixed(3) + '%</div></div>';
+
+  // ── Tháp dân số ──────────────────────────────────────────────────────────────
+  document.getElementById('pyramid').innerHTML = rows.map(function (r) {
+    var wNam = (r.nam.mac / maxSide * 100).toFixed(1);
+    var wNu = (r.nu.mac / maxSide * 100).toFixed(1);
+    return '<div class="pyramid-row">' +
+      '<div class="pyr-side pyr-left"><span class="pyr-val">' + fmt(r.nam.mac) + '</span><div class="pyr-bar nam" style="width:' + wNam + '%"></div></div>' +
+      '<div class="pyr-label">' + r.age + '</div>' +
+      '<div class="pyr-side pyr-right"><div class="pyr-bar nu" style="width:' + wNu + '%"></div><span class="pyr-val">' + fmt(r.nu.mac) + '</span></div>' +
+      '</div>';
+  }).join('');
+
+  // ── Table ────────────────────────────────────────────────────────────────────
+  var tbl = document.getElementById('tbl');
+  var thead = '<thead><tr><th style="text-align:left">Nhóm tuổi</th><th>Nam</th><th>Nữ</th><th>Không rõ</th><th>Tổng ca</th><th>Tử vong</th><th>CFR</th></tr></thead>';
+  var tbody = '<tbody>';
+  rows.slice().reverse().forEach(function (r) { // hiển thị bảng trẻ → già cho dễ đọc
+    var cfr = r.mac > 0 ? (r.chet / r.mac * 100) : 0;
+    tbody += '<tr>' +
+      '<td class="nhom">' + r.age + '</td>' +
+      '<td class="num">' + fmt(r.nam.mac) + '</td>' +
+      '<td class="num">' + fmt(r.nu.mac) + '</td>' +
+      '<td class="num">' + fmt(r.khac.mac) + '</td>' +
+      '<td class="num">' + fmt(r.mac) + '</td>' +
+      '<td class="num">' + fmt(r.chet) + '</td>' +
+      '<td class="num">' + cfr.toFixed(3) + '%</td>' +
+      '</tr>';
+  });
+  tbody += '<tr class="grand-total"><td class="nhom">Tổng cộng</td>' +
+    '<td class="num">' + fmt(grandNam) + '</td><td class="num">' + fmt(grandNu) + '</td><td class="num">' + fmt(grandKhac) + '</td>' +
+    '<td class="num">' + fmt(grandMac) + '</td><td class="num">' + fmt(grandChet) + '</td><td class="num">' + grandCfr.toFixed(3) + '%</td></tr>';
+  tbody += '</tbody>';
+  tbl.innerHTML = thead + tbody;
+
+  document.getElementById('note-unknown').textContent =
+    unknownAgeMac > 0
+      ? ('Ghi chú: ' + fmt(unknownAgeMac) + ' ca (' + (totalMac > 0 ? (unknownAgeMac / totalMac * 100).toFixed(1) : 0) + '%) không xác định được nhóm tuổi, không tính trong bảng/tháp trên.')
+      : '';
+
+  // ── Ghi .xlsx thuần JS (không phụ thuộc CDN) ─────────────────────────────────
+  function xmlEscape(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c];
+    });
+  }
+  function colLetter(i) {
+    var s = ''; i += 1;
+    while (i > 0) { var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); }
+    return s;
+  }
+  function crc32(bytes) {
+    var table = crc32._table || (crc32._table = (function () {
+      var t = [];
+      for (var n = 0; n < 256; n++) {
+        var c = n;
+        for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        t[n] = c >>> 0;
+      }
+      return t;
+    })());
+    var crc = 0xFFFFFFFF;
+    for (var i = 0; i < bytes.length; i++) crc = table[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  function buildZip(files) {
+    var enc = new TextEncoder();
+    var localChunks = [], centralChunks = [], offset = 0;
+    files.forEach(function (f) {
+      var nameBytes = enc.encode(f.name), data = enc.encode(f.content);
+      var crc = crc32(data), size = data.length;
+      var local = new Uint8Array(30 + nameBytes.length);
+      var lv = new DataView(local.buffer);
+      lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0, true);
+      lv.setUint16(8, 0, true); lv.setUint16(10, 0, true); lv.setUint16(12, 0, true);
+      lv.setUint32(14, crc, true); lv.setUint32(18, size, true); lv.setUint32(22, size, true);
+      lv.setUint16(26, nameBytes.length, true); lv.setUint16(28, 0, true);
+      local.set(nameBytes, 30);
+      localChunks.push(local, data);
+
+      var central = new Uint8Array(46 + nameBytes.length);
+      var cv = new DataView(central.buffer);
+      cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
+      cv.setUint16(8, 0, true); cv.setUint16(10, 0, true); cv.setUint16(12, 0, true); cv.setUint16(14, 0, true);
+      cv.setUint32(16, crc, true); cv.setUint32(20, size, true); cv.setUint32(24, size, true);
+      cv.setUint16(28, nameBytes.length, true); cv.setUint16(30, 0, true); cv.setUint16(32, 0, true);
+      cv.setUint16(34, 0, true); cv.setUint16(36, 0, true); cv.setUint32(38, 0, true); cv.setUint32(42, offset, true);
+      central.set(nameBytes, 46);
+      centralChunks.push(central);
+      offset += local.length + data.length;
+    });
+    var centralSize = centralChunks.reduce(function (s, p) { return s + p.length; }, 0);
+    var centralOffset = offset;
+    var end = new Uint8Array(22);
+    var ev = new DataView(end.buffer);
+    ev.setUint32(0, 0x06054b50, true); ev.setUint16(4, 0, true); ev.setUint16(6, 0, true);
+    ev.setUint16(8, files.length, true); ev.setUint16(10, files.length, true);
+    ev.setUint32(12, centralSize, true); ev.setUint32(16, centralOffset, true); ev.setUint16(20, 0, true);
+    return new Blob(localChunks.concat(centralChunks, [end]), {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+  }
+  function buildXlsxBlob(rowsAoa) {
+    var sheetRows = rowsAoa.map(function (row, r) {
+      var cells = row.map(function (v, c) {
+        var ref = colLetter(c) + (r + 1);
+        if (v === '' || v == null) return '';
+        if (typeof v === 'number' && !isNaN(v)) return '<c r="' + ref + '"><v>' + v + '</v></c>';
+        return '<c r="' + ref + '" t="inlineStr"><is><t xml:space="preserve">' + xmlEscape(v) + '</t></is></c>';
+      }).join('');
+      return '<row r="' + (r + 1) + '">' + cells + '</row>';
+    }).join('');
+    var sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<cols><col min="1" max="1" width="16" customWidth="1"/><col min="2" max="7" width="12" customWidth="1"/></cols>' +
+      '<sheetData>' + sheetRows + '</sheetData></worksheet>';
+    var contentTypesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>';
+    var rootRelsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+    var workbookXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+      '<sheets><sheet name="Nhan khau hoc" sheetId="1" r:id="rId1"/></sheets></workbook>';
+    var workbookRelsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
+    var stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>' +
+      '<fills count="1"><fill><patternFill patternType="none"/></fill></fills>' +
+      '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs></styleSheet>';
+    return buildZip([
+      { name: '[Content_Types].xml', content: contentTypesXml },
+      { name: '_rels/.rels', content: rootRelsXml },
+      { name: 'xl/workbook.xml', content: workbookXml },
+      { name: 'xl/_rels/workbook.xml.rels', content: workbookRelsXml },
+      { name: 'xl/styles.xml', content: stylesXml },
+      { name: 'xl/worksheets/sheet1.xml', content: sheetXml },
+    ]);
+  }
+
+  document.getElementById('btn-export').addEventListener('click', function () {
+    var aoa = [['Nhóm tuổi', 'Nam', 'Nữ', 'Không rõ', 'Tổng ca', 'Tử vong', 'CFR (%)']];
+    rows.slice().reverse().forEach(function (r) {
+      var cfr = r.mac > 0 ? (r.chet / r.mac * 100) : 0;
+      aoa.push([r.age, r.nam.mac, r.nu.mac, r.khac.mac, r.mac, r.chet, +cfr.toFixed(3)]);
+    });
+    aoa.push(['Tổng cộng', grandNam, grandNu, grandKhac, grandMac, grandChet, +grandCfr.toFixed(3)]);
+    var blob = buildXlsxBlob(aoa);
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = 'tcm_nhan_khau_hoc.xlsx';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  });
+})();
+</script>

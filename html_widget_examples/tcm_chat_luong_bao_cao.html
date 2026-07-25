@@ -1,0 +1,311 @@
+<style>
+html, body { margin: 0; padding: 0; overflow: hidden; }
+.host { display: flex; flex-direction: column; width: 100%; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+.summary {
+  flex-shrink: 0; display: flex; gap: 10px; padding: 10px 12px;
+  background: #f6f8fa; border-bottom: 2px solid #d0d7de; flex-wrap: wrap;
+}
+.stat-card {
+  flex: 1; min-width: 120px; background: #fff; border: 1px solid #e1e0d9; border-radius: 8px;
+  padding: 10px 14px; text-align: center;
+}
+.stat-card .label { font-size: 11px; color: #52514e; margin-bottom: 4px; }
+.stat-card .value { font-size: 20px; font-weight: 700; color: #0b0b0b; }
+.stat-card .value.warning { color: #b7791f; }
+.stat-card .value.good { color: #0ca30c; }
+
+.body { flex: 1; overflow: auto; padding: 10px 12px; min-height: 0; }
+.section-title { font-size: 13px; font-weight: 700; color: #0b0b0b; margin: 4px 0 8px; }
+
+.trend { display: flex; align-items: flex-end; gap: 3px; height: 90px; margin-bottom: 4px; border-bottom: 1px solid #d0d7de; padding-bottom: 2px; }
+.trend-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 4px; }
+.trend-bar { width: 100%; background: #2a78d6; border-radius: 2px 2px 0 0; }
+.trend-labels { display: flex; gap: 3px; margin-bottom: 16px; }
+.trend-labels span { flex: 1; font-size: 9px; color: #52514e; text-align: center; min-width: 4px; white-space: nowrap; }
+
+table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; margin-bottom: 10px; }
+th, td {
+  border-right: 1px solid #e1e0d9; border-bottom: 1px solid #e1e0d9;
+  padding: 5px 8px; text-align: center; vertical-align: middle; background: #fff;
+}
+thead th { background: #4276A4; color: #fff; font-weight: 600; }
+td.ten-nguon { text-align: left; font-weight: 600; }
+td.num { font-variant-numeric: tabular-nums; }
+
+.footer {
+  flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px; border-top: 1px solid #d0d7de; background: #f6f8fa;
+}
+.btn-export {
+  padding: 4px 12px; border: none; border-radius: 4px;
+  background: #217346; color: #fff; cursor: pointer;
+  font-size: 12px; font-weight: 600; line-height: 1.5; font-family: inherit;
+}
+.btn-export:hover { background: #185c38; }
+.note { font-size: 11px; color: #52514e; }
+</style>
+
+<div class="host">
+  <div class="summary" id="summary"></div>
+  <div class="body">
+    <div class="section-title">Thời gian báo cáo trung bình theo tháng (ngày từ khởi phát đến ghi nhận hồ sơ)</div>
+    <div class="trend" id="trend"></div>
+    <div class="trend-labels" id="trend-labels"></div>
+    <div class="section-title">So sánh theo giai đoạn dữ liệu</div>
+    <table id="tbl"></table>
+  </div>
+  <div class="footer">
+    <button class="btn-export" id="btn-export">⬇ Excel</button>
+    <span class="note">Ngưỡng "đúng hạn" tham khảo: ≤3 ngày. Giai đoạn cũ (trước 8/2025) chỉ ~45% ca có dữ liệu ngày nộp báo cáo, số liệu thời gian báo cáo giai đoạn này mang tính tham khảo.</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ── Tên cột dataset — nguồn: vw_tcm_chat_luong_bao_cao (đã group by nguon+thang ở chart) ──
+  var COL_NGUON = 'nguon';
+  var COL_THANG = 'thang';
+  var COL_AVG_DELAY = 'avg_so_ngay_tre';
+  var COL_CO_DELAY  = 'co_du_lieu_tre';
+  var COL_TONG_CA   = 'tong_ca';
+  var COL_DAY_DU_GT = 'day_du_gioi_tinh';
+  var COL_DAY_DU_TUOI = 'day_du_tuoi';
+  var COL_DAY_DU_XA = 'day_du_dia_ban_xa';
+  var NGUON_LABEL = { legacy: 'Trước 8/2025 (legacy)', public: 'Từ 8/2025 (hệ mới)' };
+
+  var data = window.__chartData || window.DATA || [];
+  var fmt = function (n) { return (+n || 0).toLocaleString('vi-VN'); };
+  var fmt1 = function (n) { return (+n || 0).toFixed(1); };
+
+  function fitHost() {
+    var host = document.querySelector('.host');
+    if (host) host.style.height = (window.innerHeight || 500) + 'px';
+  }
+  fitHost();
+  window.addEventListener('resize', fitHost);
+
+  function num(r, key) {
+    return +(r[key] || r['SUM__' + key] || r['AVG__' + key] || r['COUNT__' + key] || 0);
+  }
+
+  var nowMs = Date.now();
+  var byNguon = {};
+  var byMonth = {}; // key = year*100+month -> { sumDelay, cntDelay, tongCa }
+
+  data.forEach(function (r) {
+    var nguon = r[COL_NGUON] || '?';
+    var tongCa = num(r, COL_TONG_CA);
+    if (!byNguon[nguon]) {
+      byNguon[nguon] = { tongCa: 0, sumDelay: 0, cntDelay: 0, gt: 0, tuoi: 0, xa: 0 };
+    }
+    var g = byNguon[nguon];
+    g.tongCa += tongCa;
+    var avgDelay = num(r, COL_AVG_DELAY);
+    var cntDelay = num(r, COL_CO_DELAY);
+    g.sumDelay += avgDelay * cntDelay;
+    g.cntDelay += cntDelay;
+    g.gt += num(r, COL_DAY_DU_GT);
+    g.tuoi += num(r, COL_DAY_DU_TUOI);
+    g.xa += num(r, COL_DAY_DU_XA);
+
+    var thangTs = r[COL_THANG] ? +r[COL_THANG] : null;
+    if (thangTs && thangTs <= nowMs) {
+      var d = new Date(thangTs);
+      var key = d.getFullYear() * 100 + (d.getMonth() + 1);
+      if (!byMonth[key]) byMonth[key] = { sumDelay: 0, cntDelay: 0 };
+      byMonth[key].sumDelay += avgDelay * cntDelay;
+      byMonth[key].cntDelay += cntDelay;
+    }
+  });
+
+  var grandTongCa = 0, grandSumDelay = 0, grandCntDelay = 0;
+  Object.keys(byNguon).forEach(function (k) {
+    var g = byNguon[k];
+    grandTongCa += g.tongCa;
+    grandSumDelay += g.sumDelay;
+    grandCntDelay += g.cntDelay;
+  });
+  var grandAvgDelay = grandCntDelay > 0 ? (grandSumDelay / grandCntDelay) : 0;
+  var grandCoverage = grandTongCa > 0 ? (grandCntDelay / grandTongCa * 100) : 0;
+
+  // ── Summary cards ──────────────────────────────────────────────────────────
+  document.getElementById('summary').innerHTML =
+    '<div class="stat-card"><div class="label">Tổng số ca</div><div class="value">' + fmt(grandTongCa) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Thời gian báo cáo TB (ngày)</div><div class="value warning">' + fmt1(grandAvgDelay) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Có dữ liệu thời gian báo cáo</div><div class="value">' + fmt1(grandCoverage) + '%</div></div>';
+
+  // ── Trend theo tháng (24 tháng gần nhất) ─────────────────────────────────────
+  var monthKeys = Object.keys(byMonth).map(Number).sort(function (a, b) { return a - b; });
+  var last24 = monthKeys.slice(-24);
+  var monthAvg = {};
+  last24.forEach(function (k) {
+    var m = byMonth[k];
+    monthAvg[k] = m.cntDelay > 0 ? (m.sumDelay / m.cntDelay) : 0;
+  });
+  var maxVal = Math.max.apply(null, last24.map(function (k) { return monthAvg[k]; })) || 1;
+
+  document.getElementById('trend').innerHTML = last24.map(function (k) {
+    var h = (monthAvg[k] / maxVal * 100).toFixed(1);
+    return '<div class="trend-bar-wrap" title="' + fmt1(monthAvg[k]) + ' ngày"><div class="trend-bar" style="height:' + h + '%"></div></div>';
+  }).join('');
+  document.getElementById('trend-labels').innerHTML = last24.map(function (k, i) {
+    var y = Math.floor(k / 100), m = k % 100;
+    return '<span>' + (m === 1 || i === 0 ? m + '/' + y : m) + '</span>';
+  }).join('');
+
+  // ── Bảng so sánh theo nguồn ──────────────────────────────────────────────────
+  var nguonKeys = Object.keys(byNguon).sort(); // 'legacy' truoc 'public'
+  var tbl = document.getElementById('tbl');
+  var thead = '<thead><tr><th style="text-align:left">Giai đoạn</th><th>Tổng ca</th><th>TG báo cáo TB (ngày)</th>' +
+    '<th>% có dữ liệu TG báo cáo</th><th>% đầy đủ giới tính</th><th>% đầy đủ tuổi</th><th>% đầy đủ xã</th></tr></thead>';
+  var tbody = '<tbody>' + nguonKeys.map(function (k) {
+    var g = byNguon[k];
+    var avgDelay = g.cntDelay > 0 ? (g.sumDelay / g.cntDelay) : 0;
+    var coverage = g.tongCa > 0 ? (g.cntDelay / g.tongCa * 100) : 0;
+    var pctGt = g.tongCa > 0 ? (g.gt / g.tongCa * 100) : 0;
+    var pctTuoi = g.tongCa > 0 ? (g.tuoi / g.tongCa * 100) : 0;
+    var pctXa = g.tongCa > 0 ? (g.xa / g.tongCa * 100) : 0;
+    return '<tr>' +
+      '<td class="ten-nguon">' + (NGUON_LABEL[k] || k) + '</td>' +
+      '<td class="num">' + fmt(g.tongCa) + '</td>' +
+      '<td class="num">' + fmt1(avgDelay) + '</td>' +
+      '<td class="num">' + fmt1(coverage) + '%</td>' +
+      '<td class="num">' + fmt1(pctGt) + '%</td>' +
+      '<td class="num">' + fmt1(pctTuoi) + '%</td>' +
+      '<td class="num">' + (k === 'legacy' ? '—' : fmt1(pctXa) + '%') + '</td>' +
+      '</tr>';
+  }).join('') + '</tbody>';
+  tbl.innerHTML = thead + tbody;
+
+  // ── Ghi .xlsx thuần JS (không phụ thuộc CDN) ─────────────────────────────────
+  function xmlEscape(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c];
+    });
+  }
+  function colLetter(i) {
+    var s = ''; i += 1;
+    while (i > 0) { var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); }
+    return s;
+  }
+  function crc32(bytes) {
+    var table = crc32._table || (crc32._table = (function () {
+      var t = [];
+      for (var n = 0; n < 256; n++) {
+        var c = n;
+        for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        t[n] = c >>> 0;
+      }
+      return t;
+    })());
+    var crc = 0xFFFFFFFF;
+    for (var i = 0; i < bytes.length; i++) crc = table[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  function buildZip(files) {
+    var enc = new TextEncoder();
+    var localChunks = [], centralChunks = [], offset = 0;
+    files.forEach(function (f) {
+      var nameBytes = enc.encode(f.name), data = enc.encode(f.content);
+      var crc = crc32(data), size = data.length;
+      var local = new Uint8Array(30 + nameBytes.length);
+      var lv = new DataView(local.buffer);
+      lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0, true);
+      lv.setUint16(8, 0, true); lv.setUint16(10, 0, true); lv.setUint16(12, 0, true);
+      lv.setUint32(14, crc, true); lv.setUint32(18, size, true); lv.setUint32(22, size, true);
+      lv.setUint16(26, nameBytes.length, true); lv.setUint16(28, 0, true);
+      local.set(nameBytes, 30);
+      localChunks.push(local, data);
+
+      var central = new Uint8Array(46 + nameBytes.length);
+      var cv = new DataView(central.buffer);
+      cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
+      cv.setUint16(8, 0, true); cv.setUint16(10, 0, true); cv.setUint16(12, 0, true); cv.setUint16(14, 0, true);
+      cv.setUint32(16, crc, true); cv.setUint32(20, size, true); cv.setUint32(24, size, true);
+      cv.setUint16(28, nameBytes.length, true); cv.setUint16(30, 0, true); cv.setUint16(32, 0, true);
+      cv.setUint16(34, 0, true); cv.setUint16(36, 0, true); cv.setUint32(38, 0, true); cv.setUint32(42, offset, true);
+      central.set(nameBytes, 46);
+      centralChunks.push(central);
+      offset += local.length + data.length;
+    });
+    var centralSize = centralChunks.reduce(function (s, p) { return s + p.length; }, 0);
+    var centralOffset = offset;
+    var end = new Uint8Array(22);
+    var ev = new DataView(end.buffer);
+    ev.setUint32(0, 0x06054b50, true); ev.setUint16(4, 0, true); ev.setUint16(6, 0, true);
+    ev.setUint16(8, files.length, true); ev.setUint16(10, files.length, true);
+    ev.setUint32(12, centralSize, true); ev.setUint32(16, centralOffset, true); ev.setUint16(20, 0, true);
+    return new Blob(localChunks.concat(centralChunks, [end]), {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+  }
+  function buildXlsxBlob(rowsAoa) {
+    var sheetRows = rowsAoa.map(function (row, r) {
+      var cells = row.map(function (v, c) {
+        var ref = colLetter(c) + (r + 1);
+        if (v === '' || v == null) return '';
+        if (typeof v === 'number' && !isNaN(v)) return '<c r="' + ref + '"><v>' + v + '</v></c>';
+        return '<c r="' + ref + '" t="inlineStr"><is><t xml:space="preserve">' + xmlEscape(v) + '</t></is></c>';
+      }).join('');
+      return '<row r="' + (r + 1) + '">' + cells + '</row>';
+    }).join('');
+    var sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<cols><col min="1" max="1" width="24" customWidth="1"/><col min="2" max="7" width="14" customWidth="1"/></cols>' +
+      '<sheetData>' + sheetRows + '</sheetData></worksheet>';
+    var contentTypesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>';
+    var rootRelsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+    var workbookXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+      '<sheets><sheet name="Chat luong bao cao" sheetId="1" r:id="rId1"/></sheets></workbook>';
+    var workbookRelsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
+    var stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>' +
+      '<fills count="1"><fill><patternFill patternType="none"/></fill></fills>' +
+      '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs></styleSheet>';
+    return buildZip([
+      { name: '[Content_Types].xml', content: contentTypesXml },
+      { name: '_rels/.rels', content: rootRelsXml },
+      { name: 'xl/workbook.xml', content: workbookXml },
+      { name: 'xl/_rels/workbook.xml.rels', content: workbookRelsXml },
+      { name: 'xl/styles.xml', content: stylesXml },
+      { name: 'xl/worksheets/sheet1.xml', content: sheetXml },
+    ]);
+  }
+
+  document.getElementById('btn-export').addEventListener('click', function () {
+    var aoa = [['Giai đoạn', 'Tổng ca', 'TG báo cáo TB (ngày)', '% có dữ liệu TG báo cáo', '% đầy đủ giới tính', '% đầy đủ tuổi', '% đầy đủ xã']];
+    nguonKeys.forEach(function (k) {
+      var g = byNguon[k];
+      var avgDelay = g.cntDelay > 0 ? (g.sumDelay / g.cntDelay) : 0;
+      var coverage = g.tongCa > 0 ? (g.cntDelay / g.tongCa * 100) : 0;
+      var pctGt = g.tongCa > 0 ? (g.gt / g.tongCa * 100) : 0;
+      var pctTuoi = g.tongCa > 0 ? (g.tuoi / g.tongCa * 100) : 0;
+      var pctXa = g.tongCa > 0 ? (g.xa / g.tongCa * 100) : 0;
+      aoa.push([NGUON_LABEL[k] || k, g.tongCa, +avgDelay.toFixed(2), +coverage.toFixed(2), +pctGt.toFixed(2), +pctTuoi.toFixed(2), k === 'legacy' ? '' : +pctXa.toFixed(2)]);
+    });
+    var blob = buildXlsxBlob(aoa);
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = 'tcm_chat_luong_bao_cao.xlsx';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  });
+})();
+</script>

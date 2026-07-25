@@ -1,0 +1,297 @@
+<style>
+html, body { margin: 0; padding: 0; overflow: hidden; }
+.host { display: flex; flex-direction: column; width: 100%; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+.summary {
+  flex-shrink: 0; display: flex; gap: 10px; padding: 10px 12px;
+  background: #f6f8fa; border-bottom: 2px solid #d0d7de; flex-wrap: wrap;
+}
+.stat-card {
+  flex: 1; min-width: 100px; background: #fff; border: 1px solid #e1e0d9; border-radius: 8px;
+  padding: 10px 12px; text-align: center;
+}
+.stat-card .label { font-size: 11px; color: #52514e; margin-bottom: 4px; }
+.stat-card .value { font-size: 20px; font-weight: 700; color: #0b0b0b; }
+.stat-card .value.warning { color: #b7791f; }
+.stat-card .value.critical { color: #d03b3b; }
+
+.body { flex: 1; overflow: auto; padding: 10px 12px; min-height: 0; }
+
+.section-title { font-size: 13px; font-weight: 700; color: #0b0b0b; margin: 4px 0 8px; }
+
+.trend { display: flex; align-items: flex-end; gap: 3px; height: 90px; margin-bottom: 18px; border-bottom: 1px solid #d0d7de; padding-bottom: 2px; }
+.trend-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 4px; }
+.trend-bar { width: 100%; background: #2a78d6; border-radius: 2px 2px 0 0; }
+.trend-labels { display: flex; gap: 3px; margin-bottom: 16px; }
+.trend-labels span { flex: 1; font-size: 9px; color: #52514e; text-align: center; min-width: 4px; white-space: nowrap; }
+
+table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+th, td {
+  border-right: 1px solid #e1e0d9; border-bottom: 1px solid #e1e0d9;
+  padding: 5px 8px; text-align: center; vertical-align: middle; background: #fff;
+}
+thead th { background: #4276A4; color: #fff; font-weight: 600; }
+td.ten-tinh { text-align: left; font-weight: 600; }
+td.num { font-variant-numeric: tabular-nums; }
+
+.footer {
+  flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px; border-top: 1px solid #d0d7de; background: #f6f8fa;
+}
+.btn-export {
+  padding: 4px 12px; border: none; border-radius: 4px;
+  background: #217346; color: #fff; cursor: pointer;
+  font-size: 12px; font-weight: 600; line-height: 1.5; font-family: inherit;
+}
+.btn-export:hover { background: #185c38; }
+.note { font-size: 11px; color: #52514e; }
+</style>
+
+<div class="host">
+  <div class="summary" id="summary"></div>
+  <div class="body">
+    <div class="section-title">Ổ dịch mới theo tháng (24 tháng gần nhất)</div>
+    <div class="trend" id="trend"></div>
+    <div class="trend-labels" id="trend-labels"></div>
+    <div class="section-title">Top tỉnh theo số ổ dịch</div>
+    <table id="tbl"></table>
+  </div>
+  <div class="footer">
+    <button class="btn-export" id="btn-export">⬇ Excel</button>
+    <span class="note">Nguồn: vw_tcm_odich_ban_do (gộp legacy + public, xem thêm bản đồ ở tab này).</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ── Tên cột dataset — nguồn: vw_tcm_odich_ban_do ────────────────────────────
+  var COL_TINH   = 'ten_tinh';
+  var COL_NGAY   = 'ngay_bao_cao';
+  var COL_KETTHUC = 'ngay_ket_thuc';
+  var COL_HOATDONG = 'dang_hoat_dong';
+  var COL_SO_O_DICH = 'so_o_dich';
+  var COL_MAC = 'tong_so_ca';
+  var COL_CHET = 'so_tu_vong';
+
+  var data = window.__chartData || window.DATA || [];
+  var fmt  = function (n) { return (+n || 0).toLocaleString('vi-VN'); };
+
+  function fitHost() {
+    var host = document.querySelector('.host');
+    if (host) host.style.height = (window.innerHeight || 500) + 'px';
+  }
+  fitHost();
+  window.addEventListener('resize', fitHost);
+
+  function num(r, key) {
+    return +(r[key] || r['SUM__' + key] || r['COUNT__' + key] || 0);
+  }
+
+  var nowMs = Date.now();
+  var totalODich = 0, dangHoatDong = 0, tongCa = 0, tongChet = 0;
+  var durSumDays = 0, durCount = 0;
+  var byTinh = {};
+  var byMonth = {}; // key = year*100+month
+
+  data.forEach(function (r) {
+    var soODich = num(r, COL_SO_O_DICH);
+    if (soODich <= 0) return;
+    var tinh = r[COL_TINH] || '(?)';
+    var mac = num(r, COL_MAC);
+    var chet = num(r, COL_CHET);
+    var hoatDong = num(r, COL_HOATDONG) > 0;
+    var ngay = r[COL_NGAY] ? +r[COL_NGAY] : null;
+    var ketThuc = r[COL_KETTHUC] ? +r[COL_KETTHUC] : null;
+
+    totalODich += soODich;
+    if (hoatDong) dangHoatDong += soODich;
+    tongCa += mac;
+    tongChet += chet;
+
+    if (!hoatDong && ngay && ketThuc && ketThuc >= ngay) {
+      durSumDays += (ketThuc - ngay) / 86400000;
+      durCount += soODich;
+    }
+
+    if (!byTinh[tinh]) byTinh[tinh] = { soODich: 0, dangHoatDong: 0, mac: 0, chet: 0 };
+    byTinh[tinh].soODich += soODich;
+    if (hoatDong) byTinh[tinh].dangHoatDong += soODich;
+    byTinh[tinh].mac += mac;
+    byTinh[tinh].chet += chet;
+
+    if (ngay && ngay <= nowMs) {
+      var d = new Date(ngay);
+      var key = d.getFullYear() * 100 + (d.getMonth() + 1);
+      byMonth[key] = (byMonth[key] || 0) + soODich;
+    }
+  });
+
+  var avgDuration = durCount > 0 ? (durSumDays / durCount) : null;
+
+  // ── Summary cards ──────────────────────────────────────────────────────────
+  document.getElementById('summary').innerHTML =
+    '<div class="stat-card"><div class="label">Tổng số ổ dịch</div><div class="value">' + fmt(totalODich) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Đang hoạt động</div><div class="value warning">' + fmt(dangHoatDong) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Đã kết thúc</div><div class="value">' + fmt(totalODich - dangHoatDong) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Tổng ca trong ổ dịch</div><div class="value">' + fmt(tongCa) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Tử vong trong ổ dịch</div><div class="value critical">' + fmt(tongChet) + '</div></div>' +
+    '<div class="stat-card"><div class="label">TG xử lý TB (ngày)</div><div class="value">' + (avgDuration != null ? avgDuration.toFixed(1) : '—') + '</div></div>';
+
+  // ── Trend 24 tháng gần nhất ──────────────────────────────────────────────────
+  var monthKeys = Object.keys(byMonth).map(Number).sort(function (a, b) { return a - b; });
+  var last24 = monthKeys.slice(-24);
+  var maxVal = Math.max.apply(null, last24.map(function (k) { return byMonth[k]; })) || 1;
+
+  document.getElementById('trend').innerHTML = last24.map(function (k) {
+    var h = (byMonth[k] / maxVal * 100).toFixed(1);
+    return '<div class="trend-bar-wrap" title="' + fmt(byMonth[k]) + ' ổ dịch"><div class="trend-bar" style="height:' + h + '%"></div></div>';
+  }).join('');
+  document.getElementById('trend-labels').innerHTML = last24.map(function (k) {
+    var y = Math.floor(k / 100), m = k % 100;
+    return '<span>' + (m === 1 || last24.indexOf(k) === 0 ? m + '/' + y : m) + '</span>';
+  }).join('');
+
+  // ── Bảng top tỉnh ────────────────────────────────────────────────────────────
+  var tinhRows = Object.keys(byTinh).map(function (t) {
+    var d = byTinh[t];
+    return { tinh: t, soODich: d.soODich, dangHoatDong: d.dangHoatDong, mac: d.mac, chet: d.chet };
+  }).sort(function (a, b) { return b.soODich - a.soODich; });
+
+  var tbl = document.getElementById('tbl');
+  var thead = '<thead><tr><th style="text-align:left">Tỉnh</th><th>Số ổ dịch</th><th>Đang hoạt động</th><th>Tổng ca</th><th>Tử vong</th></tr></thead>';
+  var tbody = '<tbody>' + tinhRows.map(function (r) {
+    return '<tr>' +
+      '<td class="ten-tinh">' + r.tinh + '</td>' +
+      '<td class="num">' + fmt(r.soODich) + '</td>' +
+      '<td class="num">' + fmt(r.dangHoatDong) + '</td>' +
+      '<td class="num">' + fmt(r.mac) + '</td>' +
+      '<td class="num">' + fmt(r.chet) + '</td>' +
+      '</tr>';
+  }).join('') + '</tbody>';
+  tbl.innerHTML = thead + tbody;
+
+  // ── Ghi .xlsx thuần JS (không phụ thuộc CDN) ─────────────────────────────────
+  function xmlEscape(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c];
+    });
+  }
+  function colLetter(i) {
+    var s = ''; i += 1;
+    while (i > 0) { var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); }
+    return s;
+  }
+  function crc32(bytes) {
+    var table = crc32._table || (crc32._table = (function () {
+      var t = [];
+      for (var n = 0; n < 256; n++) {
+        var c = n;
+        for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        t[n] = c >>> 0;
+      }
+      return t;
+    })());
+    var crc = 0xFFFFFFFF;
+    for (var i = 0; i < bytes.length; i++) crc = table[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  function buildZip(files) {
+    var enc = new TextEncoder();
+    var localChunks = [], centralChunks = [], offset = 0;
+    files.forEach(function (f) {
+      var nameBytes = enc.encode(f.name), data = enc.encode(f.content);
+      var crc = crc32(data), size = data.length;
+      var local = new Uint8Array(30 + nameBytes.length);
+      var lv = new DataView(local.buffer);
+      lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0, true);
+      lv.setUint16(8, 0, true); lv.setUint16(10, 0, true); lv.setUint16(12, 0, true);
+      lv.setUint32(14, crc, true); lv.setUint32(18, size, true); lv.setUint32(22, size, true);
+      lv.setUint16(26, nameBytes.length, true); lv.setUint16(28, 0, true);
+      local.set(nameBytes, 30);
+      localChunks.push(local, data);
+
+      var central = new Uint8Array(46 + nameBytes.length);
+      var cv = new DataView(central.buffer);
+      cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
+      cv.setUint16(8, 0, true); cv.setUint16(10, 0, true); cv.setUint16(12, 0, true); cv.setUint16(14, 0, true);
+      cv.setUint32(16, crc, true); cv.setUint32(20, size, true); cv.setUint32(24, size, true);
+      cv.setUint16(28, nameBytes.length, true); cv.setUint16(30, 0, true); cv.setUint16(32, 0, true);
+      cv.setUint16(34, 0, true); cv.setUint16(36, 0, true); cv.setUint32(38, 0, true); cv.setUint32(42, offset, true);
+      central.set(nameBytes, 46);
+      centralChunks.push(central);
+      offset += local.length + data.length;
+    });
+    var centralSize = centralChunks.reduce(function (s, p) { return s + p.length; }, 0);
+    var centralOffset = offset;
+    var end = new Uint8Array(22);
+    var ev = new DataView(end.buffer);
+    ev.setUint32(0, 0x06054b50, true); ev.setUint16(4, 0, true); ev.setUint16(6, 0, true);
+    ev.setUint16(8, files.length, true); ev.setUint16(10, files.length, true);
+    ev.setUint32(12, centralSize, true); ev.setUint32(16, centralOffset, true); ev.setUint16(20, 0, true);
+    return new Blob(localChunks.concat(centralChunks, [end]), {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+  }
+  function buildXlsxBlob(rowsAoa) {
+    var sheetRows = rowsAoa.map(function (row, r) {
+      var cells = row.map(function (v, c) {
+        var ref = colLetter(c) + (r + 1);
+        if (v === '' || v == null) return '';
+        if (typeof v === 'number' && !isNaN(v)) return '<c r="' + ref + '"><v>' + v + '</v></c>';
+        return '<c r="' + ref + '" t="inlineStr"><is><t xml:space="preserve">' + xmlEscape(v) + '</t></is></c>';
+      }).join('');
+      return '<row r="' + (r + 1) + '">' + cells + '</row>';
+    }).join('');
+    var sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<cols><col min="1" max="1" width="24" customWidth="1"/><col min="2" max="5" width="14" customWidth="1"/></cols>' +
+      '<sheetData>' + sheetRows + '</sheetData></worksheet>';
+    var contentTypesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>';
+    var rootRelsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+    var workbookXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+      '<sheets><sheet name="O dich" sheetId="1" r:id="rId1"/></sheets></workbook>';
+    var workbookRelsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
+    var stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>' +
+      '<fills count="1"><fill><patternFill patternType="none"/></fill></fills>' +
+      '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs></styleSheet>';
+    return buildZip([
+      { name: '[Content_Types].xml', content: contentTypesXml },
+      { name: '_rels/.rels', content: rootRelsXml },
+      { name: 'xl/workbook.xml', content: workbookXml },
+      { name: 'xl/_rels/workbook.xml.rels', content: workbookRelsXml },
+      { name: 'xl/styles.xml', content: stylesXml },
+      { name: 'xl/worksheets/sheet1.xml', content: sheetXml },
+    ]);
+  }
+
+  document.getElementById('btn-export').addEventListener('click', function () {
+    var aoa = [['Tỉnh', 'Số ổ dịch', 'Đang hoạt động', 'Tổng ca', 'Tử vong']];
+    tinhRows.forEach(function (r) {
+      aoa.push([r.tinh, r.soODich, r.dangHoatDong, r.mac, r.chet]);
+    });
+    var blob = buildXlsxBlob(aoa);
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = 'tcm_o_dich_chi_tiet.xlsx';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  });
+})();
+</script>
