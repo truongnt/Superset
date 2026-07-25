@@ -1,0 +1,423 @@
+<style>
+html, body { margin: 0; padding: 0; overflow: hidden; }
+.host { display: flex; flex-direction: column; width: 100%; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+.toolbar {
+  flex-shrink: 0; background: #f6f8fa; border-bottom: 2px solid #d0d7de;
+  padding: 7px 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.toolbar label { font-size: 11px; color: #555; font-weight: 500; }
+.toolbar select {
+  padding: 2px 6px; border: 1px solid #bbb; border-radius: 4px;
+  font-size: 12px; color: #333; background: #fff; height: 26px; font-family: inherit;
+}
+.legend { display: flex; align-items: center; gap: 14px; font-size: 11px; color: #444; margin-left: 8px; flex-wrap: wrap; }
+.legend .sw { display: inline-block; width: 14px; height: 3px; margin-right: 4px; vertical-align: middle; }
+.legend .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+
+.chart-wrap { flex: 1; overflow: hidden; position: relative; min-height: 0; }
+.chart-wrap svg { display: block; width: 100%; height: 100%; }
+
+.tooltip {
+  position: absolute; pointer-events: none; background: rgba(30,41,59,.95); color: #fff;
+  font-size: 11px; padding: 6px 9px; border-radius: 5px; line-height: 1.5; white-space: nowrap;
+  transform: translate(-50%, -100%); margin-top: -8px; z-index: 20; display: none;
+}
+.tooltip b { font-weight: 700; }
+
+.footer {
+  flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px; border-top: 1px solid #d0d7de; background: #f6f8fa;
+}
+.btn-export {
+  padding: 4px 12px; border: none; border-radius: 4px;
+  background: #217346; color: #fff; cursor: pointer;
+  font-size: 12px; font-weight: 600; line-height: 1.5; font-family: inherit;
+}
+.btn-export:hover { background: #185c38; }
+.note { font-size: 11px; color: #92400e; background: #fef3c7; padding: 4px 10px; border-radius: 4px; border: 1px solid #f5cf87; }
+.stat-text { font-size: 11px; color: #666; }
+</style>
+
+<div class="host">
+  <div class="toolbar">
+    <label>Năm quan sát:</label>
+    <select id="f-year"></select>
+    <div class="legend">
+      <span><span class="sw" style="background:#cde2fb"></span>Vùng bình thường (TB ± 1 SD, nền)</span>
+      <span><span class="sw" style="background:#fab219;border-top:2px dashed #fab219;height:0"></span>Ngưỡng cảnh báo dịch (TB + 2SD)</span>
+      <span><span class="dot" style="background:#2a78d6"></span>Số ca (bình thường)</span>
+      <span><span class="dot" style="background:#d03b3b"></span>Số ca (vượt ngưỡng)</span>
+    </div>
+  </div>
+
+  <div class="chart-wrap">
+    <svg id="chart"></svg>
+    <div class="tooltip" id="tooltip"></div>
+  </div>
+
+  <div class="footer">
+    <button class="btn-export" id="btn-export">⬇ Excel</button>
+    <span class="stat-text" id="stat-text"></span>
+    <span class="note">⚠️ Đường nền dịch tễ tính từ các năm nền (loại năm có tuần vượt ngưỡng dịch), tối thiểu cần vài năm dữ liệu ổn định để có ý nghĩa thống kê.</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ── Tên cột dataset — chỉnh nếu khác. Nguồn: vw_tcm_epi_curve_quocgia ────────
+  // ten_benh = Bệnh tay - chân - miệng (đã lọc sẵn trong view, không lọc lại ở đây)
+  var COL_NAM      = 'nam';        // năm (số)
+  var COL_SO_TUAN  = 'so_tuan';    // số tuần dịch tễ trong năm (1..53)
+  var COL_TUAN     = 'tuan';       // ngày đầu tuần dịch tễ (dùng làm nhãn ngày)
+  var COL_MAC      = 'tong_ca';
+  var COL_CHET     = 'tu_vong';
+  var MIN_YEAR     = 2016;         // loại dữ liệu rác (năm lỗi nhập liệu) ngoài khoảng hợp lý
+  var MAX_WEEKS    = 53;
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  var data = window.__chartData || window.DATA || [];
+  var fmt  = function (n) { return (+n || 0).toLocaleString('vi-VN'); };
+
+  function fitHost() {
+    var host = document.querySelector('.host');
+    if (host) host.style.height = (window.innerHeight || 500) + 'px';
+  }
+  fitHost();
+  window.addEventListener('resize', function () { fitHost(); render(); });
+
+  function num(r, key) {
+    return +(r[key] || r['SUM__' + key] || r['COUNT__' + key] || 0);
+  }
+  function toMs(v) {
+    if (v == null) return null;
+    var n = +v;
+    if (!isNaN(n) && n > 1e10) return n;
+    var d = new Date(v);
+    return isNaN(d.getTime()) ? null : d.getTime();
+  }
+  function fmtDate(ms) {
+    var d = new Date(ms);
+    return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+  }
+
+  var nowMs   = Date.now();
+  var thisYear = new Date(nowMs).getFullYear();
+
+  // ── Gom dữ liệu: byYear[year][week] = { mac, chet, tuanDate } ──────────────────
+  var byYear = {};
+  var yearSet = [];
+
+  data.forEach(function (r) {
+    var year = +r[COL_NAM];
+    var week = +r[COL_SO_TUAN];
+    if (!year || !week || year < MIN_YEAR || week < 1 || week > MAX_WEEKS) return;
+
+    var tuanMs = toMs(r[COL_TUAN]);
+    if (tuanMs != null && tuanMs > nowMs) return; // tuần chưa tới (dữ liệu rác/ngày lỗi)
+
+    if (!byYear[year]) { byYear[year] = {}; yearSet.push(year); }
+    if (!byYear[year][week]) byYear[year][week] = { mac: 0, chet: 0, tuanMs: tuanMs };
+    byYear[year][week].mac += num(r, COL_MAC);
+    byYear[year][week].chet += num(r, COL_CHET);
+  });
+
+  var years = yearSet.sort(function (a, b) { return a - b; });
+
+  // ── Đường nền dịch tễ (endemic channel) ────────────────────────────────────────
+  function mean(arr) { return arr.length ? arr.reduce(function (s, v) { return s + v; }, 0) / arr.length : 0; }
+  function stddev(arr, m) {
+    if (arr.length < 2) return 0;
+    var v = arr.reduce(function (s, x) { return s + (x - m) * (x - m); }, 0) / (arr.length - 1);
+    return Math.sqrt(v);
+  }
+
+  function computeChannel(baselineYears, week) {
+    var values = baselineYears.map(function (y) { return (byYear[y] && byYear[y][week]) ? byYear[y][week].mac : 0; });
+    var included = values.slice();
+    for (var pass = 0; pass < 3 && included.length > 2; pass++) {
+      var m = mean(included), sd = stddev(included, m);
+      var upper = m + 2 * sd;
+      var trimmed = included.filter(function (v) { return v <= upper; });
+      if (trimmed.length === included.length) break;
+      included = trimmed;
+    }
+    var m2 = mean(included), sd2 = stddev(included, m2);
+    return {
+      mean: m2,
+      low: Math.max(0, m2 - sd2),
+      high: m2 + sd2,
+      threshold: m2 + 2 * sd2,
+      nYears: included.length,
+    };
+  }
+
+  // ── UI: chọn năm quan sát ───────────────────────────────────────────────────────
+  var selYear = document.getElementById('f-year');
+  years.forEach(function (y) {
+    var opt = document.createElement('option');
+    opt.value = y; opt.textContent = y;
+    selYear.appendChild(opt);
+  });
+  if (years.length) selYear.value = years[years.length - 1];
+  selYear.addEventListener('change', render);
+
+  var tooltip = document.getElementById('tooltip');
+  var svg = document.getElementById('chart');
+  var _series = null; // dữ liệu tuần hiện tại — dùng lại khi export
+
+  function buildSeries() {
+    var currentYear = +selYear.value;
+    var baselineYears = years.filter(function (y) { return y !== currentYear; });
+    var yearData = byYear[currentYear] || {};
+
+    var realWeeks = Object.keys(yearData).map(Number);
+    var lastWeek = realWeeks.length ? Math.max.apply(null, realWeeks) : 0;
+    var anyWeek = realWeeks[0], anyMs = anyWeek != null ? yearData[anyWeek].tuanMs : null;
+
+    var rows = [];
+    for (var w = 1; w <= MAX_WEEKS; w++) {
+      var ch = computeChannel(baselineYears, w);
+      var cur = yearData[w] || null;
+      var hasHappened = w <= lastWeek;
+      var tuanMs = cur ? cur.tuanMs : (anyMs != null ? anyMs + (w - anyWeek) * 7 * 86400000 : null);
+      rows.push({
+        week: w,
+        tuanMs: tuanMs,
+        mac: cur ? cur.mac : (hasHappened ? 0 : null),
+        chet: cur ? cur.chet : (hasHappened ? 0 : null),
+        channelLow: ch.low,
+        channelHigh: ch.high,
+        threshold: ch.threshold,
+        nYears: ch.nYears,
+      });
+    }
+
+    return { year: currentYear, baselineYears: baselineYears, rows: rows, lastWeek: lastWeek };
+  }
+
+  // ── Vẽ SVG (line/area chart tự viết, không dùng thư viện ngoài) ────────────────
+  function render() {
+    if (!years.length) { svg.innerHTML = ''; return; }
+    _series = buildSeries();
+    var rows = _series.rows;
+
+    var rect = svg.parentElement.getBoundingClientRect();
+    var W = Math.max(300, rect.width), H = Math.max(200, rect.height);
+    var pad = { top: 16, right: 20, bottom: 28, left: 46 };
+    var innerW = W - pad.left - pad.right, innerH = H - pad.top - pad.bottom;
+
+    if (!rows.length) {
+      svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+      svg.innerHTML = '<text x="' + (W / 2) + '" y="' + (H / 2) + '" text-anchor="middle" fill="#888" font-size="13">Không có dữ liệu cho năm đã chọn</text>';
+      document.getElementById('stat-text').textContent = '';
+      return;
+    }
+
+    var maxY = Math.max.apply(null, rows.map(function (r) { return Math.max(r.mac || 0, r.threshold); })) * 1.15 || 1;
+    var n = rows.length;
+    var x = function (i) { return pad.left + (n > 1 ? (i / (n - 1)) * innerW : innerW / 2); };
+    var y = function (v) { return pad.top + innerH - (v / maxY) * innerH; };
+
+    function path(getVal, skipNull) {
+      var d = '';
+      rows.forEach(function (r, i) {
+        var v = getVal(r);
+        if (v == null) { if (!skipNull) d += ''; return; }
+        d += (d ? ' L ' : 'M ') + x(i).toFixed(1) + ' ' + y(v).toFixed(1);
+      });
+      return d;
+    }
+
+    function areaPath(getLow, getHigh) {
+      var top = '', bot = '';
+      rows.forEach(function (r, i) {
+        top += (top ? ' L ' : 'M ') + x(i).toFixed(1) + ' ' + y(getHigh(r)).toFixed(1);
+      });
+      for (var i = rows.length - 1; i >= 0; i--) {
+        bot += ' L ' + x(i).toFixed(1) + ' ' + y(getLow(rows[i])).toFixed(1);
+      }
+      return top + bot + ' Z';
+    }
+
+    var yTicks = [0, 0.25, 0.5, 0.75, 1].map(function (f) { return Math.round(maxY * f); });
+    var yGrid = yTicks.map(function (v) {
+      return '<line x1="' + pad.left + '" x2="' + (pad.left + innerW) + '" y1="' + y(v).toFixed(1) + '" y2="' + y(v).toFixed(1) + '" stroke="#e1e0d9" stroke-width="1"/>' +
+             '<text x="' + (pad.left - 8) + '" y="' + (y(v) + 4).toFixed(1) + '" text-anchor="end" font-size="10" fill="#898781">' + fmt(v) + '</text>';
+    }).join('');
+
+    var xTicks = rows.map(function (r, i) {
+      if (i % 4 !== 0 && i !== n - 1) return '';
+      return '<text x="' + x(i).toFixed(1) + '" y="' + (pad.top + innerH + 18) + '" text-anchor="middle" font-size="9" fill="#898781">T' + r.week + '</text>';
+    }).join('');
+
+    var channelArea = areaPath(function (r) { return r.channelLow; }, function (r) { return r.channelHigh; });
+    var thresholdLine = path(function (r) { return r.threshold; });
+    var macLine = path(function (r) { return r.mac; }, true);
+
+    var points = rows.map(function (r, i) {
+      if (r.mac == null) return '';
+      var over = r.mac > r.threshold;
+      return '<circle class="pt" data-i="' + i + '" cx="' + x(i).toFixed(1) + '" cy="' + y(r.mac).toFixed(1) +
+             '" r="3.2" fill="' + (over ? '#d03b3b' : '#2a78d6') + '" stroke="#fcfcfb" stroke-width="1"/>';
+    }).join('');
+
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.innerHTML =
+      '<g>' + yGrid + xTicks +
+      '<path d="' + channelArea + '" fill="#cde2fb" opacity="0.7" stroke="none"/>' +
+      '<path d="' + thresholdLine + '" fill="none" stroke="#fab219" stroke-width="1.5" stroke-dasharray="5,3"/>' +
+      '<path d="' + macLine + '" fill="none" stroke="#2a78d6" stroke-width="2"/>' +
+      points +
+      '</g>';
+
+    svg.querySelectorAll('.pt').forEach(function (el) {
+      el.addEventListener('pointerenter', function (e) {
+        var r = rows[+el.dataset.i];
+        tooltip.innerHTML = '<b>Tuần ' + r.week + ' (' + fmtDate(r.tuanMs) + ')</b><br>' +
+          'Số mắc: <b>' + fmt(r.mac) + '</b> | Tử vong: <b>' + fmt(r.chet) + '</b><br>' +
+          'Ngưỡng dịch (nền ' + r.nYears + ' năm): ' + fmt(Math.round(r.threshold)) +
+          (r.mac > r.threshold ? '<br><span style="color:#ffb4b4">⚠ Vượt ngưỡng cảnh báo dịch</span>' : '');
+        var rc = svg.getBoundingClientRect();
+        tooltip.style.left = (rc.left - svg.parentElement.getBoundingClientRect().left + parseFloat(el.getAttribute('cx'))) + 'px';
+        tooltip.style.top = (parseFloat(el.getAttribute('cy'))) + 'px';
+        tooltip.style.display = 'block';
+      });
+      el.addEventListener('pointerleave', function () { tooltip.style.display = 'none'; });
+    });
+
+    var overWeeks = rows.filter(function (r) { return r.mac != null && r.mac > r.threshold; }).length;
+    document.getElementById('stat-text').textContent =
+      _series.year + ': ' + _series.lastWeek + ' tuần có dữ liệu, nền tính từ ' + _series.baselineYears.length + ' năm khác, ' +
+      overWeeks + ' tuần vượt ngưỡng cảnh báo dịch.';
+  }
+
+  render();
+
+  // ── Ghi .xlsx thuần JS (không phụ thuộc CDN) ─────────────────────────────────
+  function xmlEscape(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c];
+    });
+  }
+  function colLetter(i) {
+    var s = ''; i += 1;
+    while (i > 0) { var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); }
+    return s;
+  }
+  function crc32(bytes) {
+    var table = crc32._table || (crc32._table = (function () {
+      var t = [];
+      for (var n = 0; n < 256; n++) {
+        var c = n;
+        for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        t[n] = c >>> 0;
+      }
+      return t;
+    })());
+    var crc = 0xFFFFFFFF;
+    for (var i = 0; i < bytes.length; i++) crc = table[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  function buildZip(files) {
+    var enc = new TextEncoder();
+    var localChunks = [], centralChunks = [], offset = 0;
+    files.forEach(function (f) {
+      var nameBytes = enc.encode(f.name), data = enc.encode(f.content);
+      var crc = crc32(data), size = data.length;
+      var local = new Uint8Array(30 + nameBytes.length);
+      var lv = new DataView(local.buffer);
+      lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0, true);
+      lv.setUint16(8, 0, true); lv.setUint16(10, 0, true); lv.setUint16(12, 0, true);
+      lv.setUint32(14, crc, true); lv.setUint32(18, size, true); lv.setUint32(22, size, true);
+      lv.setUint16(26, nameBytes.length, true); lv.setUint16(28, 0, true);
+      local.set(nameBytes, 30);
+      localChunks.push(local, data);
+
+      var central = new Uint8Array(46 + nameBytes.length);
+      var cv = new DataView(central.buffer);
+      cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
+      cv.setUint16(8, 0, true); cv.setUint16(10, 0, true); cv.setUint16(12, 0, true); cv.setUint16(14, 0, true);
+      cv.setUint32(16, crc, true); cv.setUint32(20, size, true); cv.setUint32(24, size, true);
+      cv.setUint16(28, nameBytes.length, true); cv.setUint16(30, 0, true); cv.setUint16(32, 0, true);
+      cv.setUint16(34, 0, true); cv.setUint16(36, 0, true); cv.setUint32(38, 0, true); cv.setUint32(42, offset, true);
+      central.set(nameBytes, 46);
+      centralChunks.push(central);
+      offset += local.length + data.length;
+    });
+    var centralSize = centralChunks.reduce(function (s, p) { return s + p.length; }, 0);
+    var centralOffset = offset;
+    var end = new Uint8Array(22);
+    var ev = new DataView(end.buffer);
+    ev.setUint32(0, 0x06054b50, true); ev.setUint16(4, 0, true); ev.setUint16(6, 0, true);
+    ev.setUint16(8, files.length, true); ev.setUint16(10, files.length, true);
+    ev.setUint32(12, centralSize, true); ev.setUint32(16, centralOffset, true); ev.setUint16(20, 0, true);
+    return new Blob(localChunks.concat(centralChunks, [end]), {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+  }
+  function buildXlsxBlob(rowsAoa) {
+    var sheetRows = rowsAoa.map(function (row, r) {
+      var cells = row.map(function (v, c) {
+        var ref = colLetter(c) + (r + 1);
+        if (v === '' || v == null) return '';
+        if (typeof v === 'number' && !isNaN(v)) return '<c r="' + ref + '"><v>' + v + '</v></c>';
+        return '<c r="' + ref + '" t="inlineStr"><is><t xml:space="preserve">' + xmlEscape(v) + '</t></is></c>';
+      }).join('');
+      return '<row r="' + (r + 1) + '">' + cells + '</row>';
+    }).join('');
+    var sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<cols><col min="1" max="1" width="8" customWidth="1"/><col min="2" max="2" width="14" customWidth="1"/>' +
+      '<col min="3" max="6" width="12" customWidth="1"/></cols>' +
+      '<sheetData>' + sheetRows + '</sheetData></worksheet>';
+    var contentTypesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>';
+    var rootRelsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+    var workbookXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+      '<sheets><sheet name="Duong cong dich te" sheetId="1" r:id="rId1"/></sheets></workbook>';
+    var workbookRelsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
+    var stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>' +
+      '<fills count="1"><fill><patternFill patternType="none"/></fill></fills>' +
+      '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs></styleSheet>';
+    return buildZip([
+      { name: '[Content_Types].xml', content: contentTypesXml },
+      { name: '_rels/.rels', content: rootRelsXml },
+      { name: 'xl/workbook.xml', content: workbookXml },
+      { name: 'xl/_rels/workbook.xml.rels', content: workbookRelsXml },
+      { name: 'xl/styles.xml', content: stylesXml },
+      { name: 'xl/worksheets/sheet1.xml', content: sheetXml },
+    ]);
+  }
+
+  document.getElementById('btn-export').addEventListener('click', function () {
+    if (!_series) return;
+    var rows = [['Tuần', 'Ngày đầu tuần', 'Số mắc', 'Tử vong', 'Ngưỡng cảnh báo dịch', 'Số năm nền']];
+    _series.rows.filter(function (r) { return r.mac != null; }).forEach(function (r) {
+      rows.push([r.week, fmtDate(r.tuanMs), r.mac, r.chet, Math.round(r.threshold), r.nYears]);
+    });
+    var blob = buildXlsxBlob(rows);
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = 'tcm_epi_curve_' + _series.year + '.xlsx';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  });
+})();
+</script>
