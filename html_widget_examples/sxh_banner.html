@@ -1,0 +1,28 @@
+<style>
+html, body { margin: 0; padding: 0; overflow: hidden; }
+.banner {
+  display: flex; align-items: center; justify-content: center;
+  height: 100%; box-sizing: border-box;
+  background-color: #fef3c7; border: 1px solid #f5cf87; color: #92400e;
+  padding: 10px 16px; border-radius: 6px; font-weight: 600; text-align: center;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+}
+</style>
+
+<div class="banner" id="banner">
+  ⚠️ Dashboard đang trong giai đoạn thử nghiệm — số liệu chưa được xác minh (verify) đầy đủ, chỉ dùng để tham khảo nội bộ.
+</div>
+
+<script>
+(function () {
+  // Banner tĩnh, không phụ thuộc dữ liệu — chuyển từ Markdown sang chart để
+  // dễ chỉnh sửa qua Explore và có thể gắn thêm nội dung động (vd ngày cập
+  // nhật dữ liệu gần nhất) sau này nếu cần, thay vì phải sửa position_json.
+  function fitHost() {
+    document.body.style.height = (window.innerHeight || 60) + 'px';
+  }
+  fitHost();
+  window.addEventListener('resize', fitHost);
+})();
+</script>
