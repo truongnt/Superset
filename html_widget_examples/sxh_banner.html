@@ -6,36 +6,47 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
   padding: 6px 0;
 }
 .banner {
-  display: flex; align-items: center; justify-content: center;
   box-sizing: border-box; padding: 8px 16px; border-radius: 6px;
-  text-align: center; font-size: 13px; line-height: 1.4;
+  font-size: 12.5px; line-height: 1.5;
 }
 .banner.warning {
-  background-color: #fef3c7; border: 1px solid #f5cf87; color: #92400e; font-weight: 600;
+  background-color: #fef3c7; border: 1px solid #f5cf87; color: #92400e;
+  font-weight: 600; text-align: center;
 }
 .banner.info {
-  background-color: #e0f2fe; border: 1px solid #7dd3fc; color: #075985; font-weight: 400;
+  background-color: #e0f2fe; border: 1px solid #7dd3fc; color: #075985;
 }
-.banner.info b { font-weight: 700; }
+.lead { font-weight: 600; margin-bottom: 5px; }
+.badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: #fff; border: 1px solid #7dd3fc; border-radius: 999px;
+  padding: 2px 10px; font-size: 12px; white-space: nowrap;
+}
+.badge b { font-weight: 700; }
+.foot-note { font-size: 11px; color: #0369a1; opacity: 0.85; }
 </style>
 
 <div class="host">
   <div class="banner warning">
     ⚠️ Dashboard đang trong giai đoạn thử nghiệm — số liệu chưa được xác minh (verify) đầy đủ, chỉ dùng để tham khảo nội bộ.
   </div>
+
   <div class="banner info">
-    ℹ️ Bộ lọc <b>"Lọc trùng (14 ngày)"</b>: cùng 1 bệnh nhân được báo cáo mắc SXH nhiều lần trong vòng 14 ngày (tái khám, chuyển tuyến, nhập viện sau khám ngoại trú...) chỉ tính 1 ca — lấy lần báo cáo đầu tiên, tránh đếm trùng nhiều lượt báo cáo của cùng 1 đợt bệnh.
-    <b>Đã lọc trùng</b> = chỉ ca đầu tiên (khuyến nghị) &nbsp;|&nbsp;
-    <b>Ca trùng bị loại</b> = chỉ xem lượt bị loại &nbsp;|&nbsp;
-    <b>Không lọc trùng (tất cả)</b> = tổng đầy đủ cả 2 loại.
+    <div class="lead">ℹ️ Bộ lọc "Lọc trùng (14 ngày)": cùng 1 bệnh nhân được báo cáo mắc SXH nhiều lần trong vòng 14 ngày (tái khám, chuyển tuyến, nhập viện sau khám ngoại trú...) chỉ tính 1 ca — lấy lần báo cáo đầu tiên.</div>
+    <div class="badges">
+      <span class="badge">🟢 <b>Đã lọc trùng</b> — chỉ ca đầu tiên (khuyến nghị)</span>
+      <span class="badge">🟡 <b>Ca trùng bị loại</b> — chỉ lượt bị loại</span>
+      <span class="badge">⚪ <b>Không lọc trùng (tất cả)</b> — tổng cả 2 loại</span>
+    </div>
+    <div class="foot-note">Cửa sổ 14 ngày chỉ nhằm loại đăng ký trùng lặp hành chính (vd tái khám, chuyển tuyến, nhập viện sau khám ngoại trú), tránh đếm trùng nhiều lượt báo cáo của cùng 1 đợt bệnh.</div>
   </div>
 </div>
 
 <script>
 (function () {
-  // Banner tĩnh, không phụ thuộc dữ liệu — chuyển từ Markdown sang chart để
-  // dễ chỉnh sửa qua Explore và có thể gắn thêm nội dung động (vd ngày cập
-  // nhật dữ liệu gần nhất) sau này nếu cần, thay vì phải sửa position_json.
+  // Banner tĩnh, không phụ thuộc dữ liệu — theo cùng mẫu banner TCM/Lao
+  // (chart 134 / 145) để dễ chỉnh sửa qua Explore.
   function fitHost() {
     document.body.style.height = (window.innerHeight || 60) + 'px';
   }
