@@ -30,6 +30,15 @@ body { margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }
   font-size: 11px;
   color: #888;
 }
+.yoy {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  min-height: 16px;
+}
+.yoy.up { color: #d03b3b; }
+.yoy.down { color: #0ca30c; }
+.yoy.flat { color: #888; }
 .scope-note {
   margin: 4px 8px 0;
   font-size: 11px;
@@ -41,11 +50,13 @@ body { margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }
 <div class="row">
   <div class="card">
     <p class="label">Tổng ca TCM</p>
-    <p class="total" id="tong-ca">{{tong_ca}}</p>
+    <p class="total" id="tong-ca">0</p>
+    <p class="yoy" id="yoy-ca"></p>
   </div>
   <div class="card">
     <p class="label">Tử vong</p>
-    <p class="total" id="tu-vong" style="color:#E24B4A">{{tu_vong}}</p>
+    <p class="total" id="tu-vong" style="color:#E24B4A">0</p>
+    <p class="yoy" id="yoy-chet"></p>
   </div>
   <div class="card">
     <p class="label">Tỷ lệ tử vong</p>
@@ -53,29 +64,73 @@ body { margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }
     <p class="compare" style="color:#888">trên tổng ca</p>
   </div>
 </div>
-<p class="scope-note">📅 Theo bộ lọc "Thời gian" (mặc định: năm hiện tại)</p>
+<p class="scope-note" id="scope-note"></p>
 
 <script>
-function val(id) {
-  var el = document.getElementById(id);
-  if (!el) return 0;
-  var v = el.textContent.trim().replace('%', '');
-  if (v === '' || v === 'None' || v === 'null') return 0;
-  // Superset render số theo định dạng có dấu chấm phân cách hàng nghìn
-  // (vd "69.756") - phải bỏ dấu chấm đó trước khi parseFloat, nếu không
-  // "69.756" bị đọc nhầm thành số thập phân 69.756 (sai lệch 1000 lần).
-  if (/^\d{1,3}(\.\d{3})+$/.test(v)) {
-    v = v.replace(/\./g, '');
-  } else if (/^\d{1,3}(\.\d{3})+,\d+$/.test(v)) {
-    v = v.replace(/\./g, '').replace(',', '.');
-  }
-  var n = parseFloat(v);
-  return isNaN(n) ? 0 : n;
-}
+(function () {
+  // ── Tên cột dataset — nguồn: vw_tcm_ca_theo_thang ────────────────────────────
+  var COL_THANG = 'ngay_su_kien'; // ngày đầu tháng
+  var COL_MAC   = 'tong_so';
+  var COL_CHET  = 'tu_vong';
+  // ─────────────────────────────────────────────────────────────────────────────
 
-var tong = val('tong-ca');
-var tv = val('tu-vong');
-var tyLe = tong > 0 ? (tv / tong * 100).toFixed(3) : 0;
-var tyLeEl = document.getElementById('ty-le-tv');
-if (tyLeEl) tyLeEl.textContent = tyLe + '%';
+  var data = window.__chartData || window.DATA || [];
+  var fmt = function (n) { return (+n || 0).toLocaleString('vi-VN'); };
+
+  function num(r, key) {
+    return +(r[key] || r['SUM__' + key] || r['COUNT__' + key] || 0);
+  }
+  function toMs(v) {
+    if (v == null) return null;
+    var n = +v;
+    if (!isNaN(n) && n > 1e10) return n;
+    var d = new Date(v);
+    return isNaN(d.getTime()) ? null : d.getTime();
+  }
+
+  var nowMs = Date.now();
+  var now = new Date(nowMs);
+  var curYear = now.getFullYear();
+  var curMonth = now.getMonth() + 1;
+  var priorYear = curYear - 1;
+
+  // Lũy kế từ đầu năm đến hết tháng hiện tại (YTD), so với CÙNG SỐ THÁNG của
+  // năm trước — không dùng bộ lọc "Thời gian" của dashboard (widget này luôn
+  // tự tính đủ lịch sử để so sánh cùng kỳ, giống cách đường cong dịch tễ tự
+  // quản lý phạm vi năm của nó).
+  var cur = { mac: 0, chet: 0 };
+  var prior = { mac: 0, chet: 0 };
+
+  data.forEach(function (r) {
+    var ts = toMs(r[COL_THANG]);
+    if (ts == null || ts > nowMs) return; // bỏ dữ liệu rác/ngày tương lai
+    var d = new Date(ts);
+    var y = d.getFullYear(), m = d.getMonth() + 1;
+    if (y === curYear && m <= curMonth) {
+      cur.mac += num(r, COL_MAC); cur.chet += num(r, COL_CHET);
+    } else if (y === priorYear && m <= curMonth) {
+      prior.mac += num(r, COL_MAC); prior.chet += num(r, COL_CHET);
+    }
+  });
+
+  document.getElementById('tong-ca').textContent = fmt(cur.mac);
+  document.getElementById('tu-vong').textContent = fmt(cur.chet);
+  var tyLe = cur.mac > 0 ? (cur.chet / cur.mac * 100) : 0;
+  document.getElementById('ty-le-tv').textContent = tyLe.toFixed(3) + '%';
+
+  function renderYoy(elId, curVal, priorVal) {
+    var el = document.getElementById(elId);
+    if (!el || priorVal <= 0) return;
+    var pct = (curVal - priorVal) / priorVal * 100;
+    var arrow = pct > 0.5 ? '▲' : (pct < -0.5 ? '▼' : '►');
+    var cls = pct > 0.5 ? 'up' : (pct < -0.5 ? 'down' : 'flat');
+    el.className = 'yoy ' + cls;
+    el.textContent = arrow + ' ' + (pct >= 0 ? '+' : '') + pct.toFixed(1) + '% so với cùng kỳ ' + priorYear;
+  }
+  renderYoy('yoy-ca', cur.mac, prior.mac);
+  renderYoy('yoy-chet', cur.chet, prior.chet);
+
+  document.getElementById('scope-note').textContent =
+    '📅 Lũy kế từ đầu năm đến hết tháng ' + curMonth + '/' + curYear + ' (không theo bộ lọc "Thời gian")';
+})();
 </script>

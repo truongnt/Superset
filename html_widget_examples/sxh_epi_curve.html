@@ -45,7 +45,7 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
     <select id="f-year"></select>
     <div class="legend">
       <span><span class="sw" style="background:#cde2fb"></span>Vùng bình thường (TB ± 1 SD, nền)</span>
-      <span><span class="sw" style="background:#fab219;border-top:2px dashed #fab219;height:0"></span>Ngưỡng cảnh báo dịch (TB + 2SD)</span>
+      <span><span class="sw" style="background:#fab219;border-top:2px dashed #fab219;height:0"></span>Ngưỡng thống kê (TB + 2SD) — không phải ngưỡng công bố dịch</span>
       <span><span class="dot" style="background:#2a78d6"></span>Số ca (bình thường)</span>
       <span><span class="dot" style="background:#d03b3b"></span>Số ca (vượt ngưỡng)</span>
     </div>
@@ -59,7 +59,7 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
   <div class="footer">
     <button class="btn-export" id="btn-export">⬇ Excel</button>
     <span class="stat-text" id="stat-text"></span>
-    <span class="note">⚠️ Đường nền dịch tễ tính từ các năm nền (loại năm có tuần vượt ngưỡng dịch), tối thiểu cần vài năm dữ liệu ổn định để có ý nghĩa thống kê.</span>
+    <span class="note">⚠️ Ngưỡng trên là đường nền thống kê tự tính (TB + 2SD từ các năm khác), <b>không phải</b> tiêu chí công bố dịch chính thức của Bộ Y tế — chỉ dùng để tham khảo xu hướng, cần đối chiếu văn bản chuyên ngành trước khi ra quyết định.</span>
   </div>
 </div>
 
@@ -290,7 +290,7 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
         tooltip.innerHTML = '<b>Tuần ' + r.week + ' (' + fmtDate(r.tuanMs) + ')</b><br>' +
           'Số mắc: <b>' + fmt(r.mac) + '</b> | Tử vong: <b>' + fmt(r.chet) + '</b><br>' +
           'Ngưỡng dịch (nền ' + r.nYears + ' năm): ' + fmt(Math.round(r.threshold)) +
-          (r.mac > r.threshold ? '<br><span style="color:#ffb4b4">⚠ Vượt ngưỡng cảnh báo dịch</span>' : '');
+          (r.mac > r.threshold ? '<br><span style="color:#ffb4b4">⚠ Vượt ngưỡng thống kê (tham khảo, không phải công bố dịch chính thức)</span>' : '');
         var rc = svg.getBoundingClientRect();
         tooltip.style.left = (rc.left - svg.parentElement.getBoundingClientRect().left + parseFloat(el.getAttribute('cx'))) + 'px';
         tooltip.style.top = (parseFloat(el.getAttribute('cy'))) + 'px';
@@ -302,7 +302,7 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
     var overWeeks = rows.filter(function (r) { return r.mac != null && r.mac > r.threshold; }).length;
     document.getElementById('stat-text').textContent =
       _series.year + ': ' + _series.lastWeek + ' tuần có dữ liệu, nền tính từ ' + _series.baselineYears.length + ' năm khác, ' +
-      overWeeks + ' tuần vượt ngưỡng cảnh báo dịch.';
+      overWeeks + ' tuần vượt ngưỡng thống kê (tham khảo — không phải tiêu chí công bố dịch của Bộ Y tế).';
   }
 
   render();
@@ -420,7 +420,7 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
 
   document.getElementById('btn-export').addEventListener('click', function () {
     if (!_series) return;
-    var rows = [['Tuần', 'Ngày đầu tuần', 'Số mắc', 'Tử vong', 'Ngưỡng cảnh báo dịch', 'Số năm nền']];
+    var rows = [['Tuần', 'Ngày đầu tuần', 'Số mắc', 'Tử vong', 'Ngưỡng thống kê (tham khảo)', 'Số năm nền']];
     _series.rows.filter(function (r) { return r.mac != null; }).forEach(function (r) {
       rows.push([r.week, fmtDate(r.tuanMs), r.mac, r.chet, Math.round(r.threshold), r.nYears]);
     });
