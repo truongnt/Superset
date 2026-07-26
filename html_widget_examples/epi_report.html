@@ -90,9 +90,14 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
 .xn-tbl tr.xa-row td { background: #f8fbff; }
 .xn-tbl tr.grand-total td { background: #fff4d6; font-weight: bold; color: #5a4500; border-bottom: 2px solid #d39c00; }
 .xn-tbl tr.grand-total td.dia-phuong { background: #fff4d6; border-right: 2px solid #d39c00; cursor: default; }
+.xn-tbl tr.vung-row td { background: #e3f3ea; font-weight: 700; color: #1e5c3f; }
+.xn-tbl td.dia-phuong.vung-name { border-right: 2px solid #2e7d5b; }
+.xn-tbl tr.vung-row:hover td { background: #d9f0e3 !important; }
+.xn-tbl tr.tinh-row.indent td.dia-phuong { padding-left: 22px !important; }
+.xn-tbl tr.xa-row.indent td.xa-name { padding-left: 42px !important; }
 .xn-tbl td.num { font-variant-numeric: tabular-nums; min-width: 70px; }
-.xn-tbl tbody tr:not(.grand-total):not(.xa-row):hover td { background: #e6f2ff !important; }
-.xn-tbl tbody tr:not(.grand-total):not(.xa-row):hover td.dia-phuong { background: #cce5f5 !important; }
+.xn-tbl tbody tr:not(.grand-total):not(.xa-row):not(.vung-row):hover td { background: #e6f2ff !important; }
+.xn-tbl tbody tr:not(.grand-total):not(.xa-row):not(.vung-row):hover td.dia-phuong { background: #cce5f5 !important; }
 .xn-tbl tbody tr.xa-row:hover td { background: #e6f2ff !important; }
 .xn-tbl thead th.sortable { cursor: pointer; user-select: none; }
 .xn-tbl thead th.sortable:hover { filter: brightness(1.2); }
@@ -113,7 +118,7 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
 }
 .btn-export:hover { background: #185c38; }
 .stat-badge { padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 700; background: #dbeafe; color: #1d4ed8; }
-.note { font-size: 10px; color: #92400e; background: #fef3c7; padding: 3px 8px; border-radius: 3px; flex-shrink: 0; }
+.note { font-size: 13px; color: #92400e; background: #fef3c7; padding: 5px 10px; border-radius: 4px; flex-shrink: 0; font-weight: 600; }
 </style>
 
 <div class="host">
@@ -252,6 +257,32 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
     { label: 'Kết quả xét nghiệm',       col: C.ketQuaXN   },
     { label: 'Sử dụng vắc xin',          col: C.vacXin     },
   ];
+
+  // ── Phân loại tỉnh theo vùng miền (theo đơn vị hành chính 34 tỉnh/thành từ 07/2025) ──
+  // Miền Bắc (18, tính đến Hà Tĩnh) / Miền Trung (5) / Tây Nguyên (3) / Miền Nam (còn lại, 8)
+  var REGION_MAP = {
+    'Cao Bằng': 'Miền Bắc', 'Điện Biên': 'Miền Bắc', 'Lai Châu': 'Miền Bắc', 'Sơn La': 'Miền Bắc',
+    'Lào Cai': 'Miền Bắc', 'Tuyên Quang': 'Miền Bắc', 'Thái Nguyên': 'Miền Bắc', 'Phú Thọ': 'Miền Bắc',
+    'Bắc Ninh': 'Miền Bắc', 'Hưng Yên': 'Miền Bắc', 'Ninh Bình': 'Miền Bắc', 'Quảng Ninh': 'Miền Bắc',
+    'Lạng Sơn': 'Miền Bắc', 'Hà Nội': 'Miền Bắc', 'Hải Phòng': 'Miền Bắc', 'Thanh Hóa': 'Miền Bắc',
+    'Nghệ An': 'Miền Bắc', 'Hà Tĩnh': 'Miền Bắc',
+
+    'Quảng Trị': 'Miền Trung', 'Huế': 'Miền Trung', 'Đà Nẵng': 'Miền Trung',
+    'Quảng Ngãi': 'Miền Trung', 'Khánh Hòa': 'Miền Trung',
+
+    'Gia Lai': 'Tây Nguyên', 'Đắk Lắk': 'Tây Nguyên', 'Lâm Đồng': 'Tây Nguyên',
+
+    'Hồ Chí Minh': 'Miền Nam', 'Đồng Nai': 'Miền Nam', 'Tây Ninh': 'Miền Nam', 'Cần Thơ': 'Miền Nam',
+    'Vĩnh Long': 'Miền Nam', 'Đồng Tháp': 'Miền Nam', 'An Giang': 'Miền Nam', 'Cà Mau': 'Miền Nam',
+  };
+  var REGION_ORDER = ['Miền Bắc', 'Miền Trung', 'Tây Nguyên', 'Miền Nam'];
+
+  function bareName(name) {
+    return String(name || '').replace(/^(Tỉnh|Thành phố|TP\.?)\s+/i, '').trim();
+  }
+  function regionOf(tinhName) {
+    return REGION_MAP[bareName(tinhName)] || null;
+  }
 
   var data = window.__chartData || window.DATA || [];
   var tbl  = document.getElementById('xn-table');
@@ -458,11 +489,34 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
       tinhs.forEach(function(t) { grand[v] += byTinh[t].vals[v] || 0; });
     });
 
-    return { byTinh: byTinh, xOrder: xOrder, tinhs: tinhs, valSet: valSet, grand: grand };
+    // Gom tỉnh theo vùng miền — chỉ hiển thị dòng vùng khi dữ liệu trải ≥ 2 vùng
+    var byRegion = {};
+    tinhs.forEach(function(t) {
+      var reg = regionOf(t) || 'Khác';
+      if (!byRegion[reg]) byRegion[reg] = [];
+      byRegion[reg].push(t);
+    });
+    var presentRegions = REGION_ORDER.filter(function(r) { return byRegion[r] && byRegion[r].length; });
+    if (byRegion['Khác'] && byRegion['Khác'].length) presentRegions.push('Khác');
+    var showRegions = presentRegions.length >= 2;
+
+    return {
+      byTinh: byTinh, xOrder: xOrder, tinhs: tinhs, valSet: valSet, grand: grand,
+      byRegion: byRegion, presentRegions: presentRegions, showRegions: showRegions,
+    };
   }
 
-  function getSortedTinh() {
-    var keys = _state.tinhs.slice();
+  function regionVals(tinhList) {
+    var totals = {};
+    _state.valSet.forEach(function(v) {
+      totals[v] = 0;
+      tinhList.forEach(function(t) { totals[v] += _state.byTinh[t].vals[v] || 0; });
+    });
+    return totals;
+  }
+
+  function sortTinhList(keys) {
+    keys = keys.slice();
     if (!sortCol) return keys;
     return keys.sort(function(a, b) {
       var getSum = function(o) {
@@ -474,6 +528,10 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
       var va = getSum(_state.byTinh[a]), vb = getSum(_state.byTinh[b]);
       return sortAsc ? va - vb : vb - va;
     });
+  }
+
+  function getSortedTinh() {
+    return sortTinhList(_state.tinhs);
   }
 
   function numCells(valsMap) {
@@ -518,17 +576,37 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
     });
     body += '</tr>';
 
-    getSortedTinh().forEach(function(t, idx) {
+    function tinhRowHtml(t, idx, vungId) {
       var tinhId = 'tinh-' + idx;
-      body += '<tr class="tinh-row" data-id="' + tinhId + '">' +
+      var html = '<tr class="tinh-row' + (vungId ? ' indent' : '') + '" data-id="' + tinhId + '"' +
+        (vungId ? ' data-vung="' + vungId + '"' : '') + '>' +
         '<td class="dia-phuong"><span class="expand-icon">▶</span>' + t + '</td>' +
         numCells(_state.byTinh[t].vals) + '</tr>';
       (_state.xOrder[t] || []).slice().sort().forEach(function(x) {
-        body += '<tr class="xa-row" data-tinh="' + tinhId + '" style="display:none">' +
+        html += '<tr class="xa-row' + (vungId ? ' indent' : '') + '" data-tinh="' + tinhId + '"' +
+          (vungId ? ' data-vung="' + vungId + '"' : '') + ' style="display:none">' +
           '<td class="xa-name">' + x + '</td>' +
           numCells(_state.byTinh[t].xas[x]) + '</tr>';
       });
-    });
+      return { html: html, tinhId: tinhId };
+    }
+
+    if (_state.showRegions) {
+      _state.presentRegions.forEach(function(region, ri) {
+        var vungId = 'vung-' + ri;
+        body += '<tr class="vung-row expanded" data-id="' + vungId + '">' +
+          '<td class="dia-phuong vung-name"><span class="expand-icon">▶</span>' + region + '</td>' +
+          numCells(regionVals(_state.byRegion[region])) + '</tr>';
+        sortTinhList(_state.byRegion[region]).forEach(function(t, idx) {
+          var r = tinhRowHtml(t, vungId + '-' + idx, vungId);
+          body += r.html;
+        });
+      });
+    } else {
+      getSortedTinh().forEach(function(t, idx) {
+        body += tinhRowHtml(t, idx, null).html;
+      });
+    }
     body += '</tbody>';
     tbl.innerHTML = head + body;
 
@@ -539,9 +617,26 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
       offset += row.offsetHeight;
     });
 
+    // Vùng: click để mở/đóng toàn bộ tỉnh (và xã đang mở) bên trong
+    tbl.querySelectorAll('.vung-row').forEach(function(row) {
+      row.addEventListener('click', function() {
+        var id = row.dataset.id;
+        var expanded = row.classList.toggle('expanded');
+        tbl.querySelectorAll('tr.tinh-row[data-vung="' + id + '"]').forEach(function(tr) {
+          tr.style.display = expanded ? 'table-row' : 'none';
+        });
+        tbl.querySelectorAll('tr.xa-row[data-vung="' + id + '"]').forEach(function(xr) {
+          if (!expanded) { xr.style.display = 'none'; return; }
+          var tinhRow = tbl.querySelector('tr.tinh-row[data-id="' + xr.dataset.tinh + '"]');
+          xr.style.display = (tinhRow && tinhRow.classList.contains('expanded')) ? 'table-row' : 'none';
+        });
+      });
+    });
+
     // Expand/collapse
     tbl.querySelectorAll('.tinh-row').forEach(function(row) {
-      row.addEventListener('click', function() {
+      row.addEventListener('click', function(e) {
+        e.stopPropagation();
         var id = this.dataset.id;
         var expanded = this.classList.toggle('expanded');
         tbl.querySelectorAll('.xa-row[data-tinh="' + id + '"]').forEach(function(r) {
@@ -736,12 +831,24 @@ html, body { margin: 0; padding: 0; overflow: hidden; }
     var grandTong = 0; _state.valSet.forEach(function(v){ grandTong += _state.grand[v]||0; });
     rows.push(['Tổng cộng', grandTong].concat(_state.valSet.map(function(v){ return _state.grand[v]||0; })));
 
-    getSortedTinh().forEach(function(t) {
-      rows.push(xlsxRow(t, _state.byTinh[t].vals));
-      (_state.xOrder[t]||[]).slice().sort().forEach(function(x) {
-        rows.push(xlsxRow('  ' + x, _state.byTinh[t].xas[x]));
+    if (_state.showRegions) {
+      _state.presentRegions.forEach(function(region) {
+        rows.push(xlsxRow(region, regionVals(_state.byRegion[region])));
+        sortTinhList(_state.byRegion[region]).forEach(function(t) {
+          rows.push(xlsxRow('  ' + t, _state.byTinh[t].vals));
+          (_state.xOrder[t]||[]).slice().sort().forEach(function(x) {
+            rows.push(xlsxRow('    ' + x, _state.byTinh[t].xas[x]));
+          });
+        });
       });
-    });
+    } else {
+      getSortedTinh().forEach(function(t) {
+        rows.push(xlsxRow(t, _state.byTinh[t].vals));
+        (_state.xOrder[t]||[]).slice().sort().forEach(function(x) {
+          rows.push(xlsxRow('  ' + x, _state.byTinh[t].xas[x]));
+        });
+      });
+    }
 
     var blob = buildXlsxBlob(rows);
     var url  = URL.createObjectURL(blob);
