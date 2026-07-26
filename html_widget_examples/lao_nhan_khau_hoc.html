@@ -144,7 +144,7 @@ tr.grand-total td { background: #fff4d6; font-weight: bold; color: #5a4500; }
     '<div class="stat-card"><div class="label">Tổng số ca (đã xác định tuổi)</div><div class="value">' + fmt(grandMac) + '</div></div>' +
     '<div class="stat-card"><div class="label">Nam / Nữ</div><div class="value">' + fmt(grandNam) + ' / ' + fmt(grandNu) + '</div></div>' +
     '<div class="stat-card"><div class="label">Không rõ giới tính</div><div class="value">' + (grandMac > 0 ? (grandKhac / grandMac * 100).toFixed(1) : '0') + '%</div></div>' +
-    '<div class="stat-card"><div class="label">CFR chung</div><div class="value critical">' + grandCfr.toFixed(3) + '%</div></div>';
+    '<div class="stat-card"><div class="label">Tỷ lệ tử vong chung (CFR)</div><div class="value critical">' + grandCfr.toFixed(3) + '%</div></div>';
 
   // ── Tháp dân số ──────────────────────────────────────────────────────────────
   document.getElementById('pyramid').innerHTML = rows.map(function (r) {
@@ -159,7 +159,7 @@ tr.grand-total td { background: #fff4d6; font-weight: bold; color: #5a4500; }
 
   // ── Table ────────────────────────────────────────────────────────────────────
   var tbl = document.getElementById('tbl');
-  var thead = '<thead><tr><th style="text-align:left">Nhóm tuổi</th><th>Nam</th><th>Nữ</th><th>Không rõ</th><th>Tổng ca</th><th>Tử vong</th><th>CFR</th></tr></thead>';
+  var thead = '<thead><tr><th style="text-align:left">Nhóm tuổi</th><th>Nam</th><th>Nữ</th><th>Không rõ</th><th>Tổng ca</th><th>Tử vong</th><th>Tỷ lệ tử vong (CFR)</th></tr></thead>';
   var tbody = '<tbody>';
   rows.slice().reverse().forEach(function (r) { // hiển thị bảng trẻ → già cho dễ đọc
     var cfr = r.mac > 0 ? (r.chet / r.mac * 100) : 0;
@@ -295,7 +295,7 @@ tr.grand-total td { background: #fff4d6; font-weight: bold; color: #5a4500; }
   }
 
   document.getElementById('btn-export').addEventListener('click', function () {
-    var aoa = [['Nhóm tuổi', 'Nam', 'Nữ', 'Không rõ', 'Tổng ca', 'Tử vong', 'CFR (%)']];
+    var aoa = [['Nhóm tuổi', 'Nam', 'Nữ', 'Không rõ', 'Tổng ca', 'Tử vong', 'Tỷ lệ tử vong (CFR) (%)']];
     rows.slice().reverse().forEach(function (r) {
       var cfr = r.mac > 0 ? (r.chet / r.mac * 100) : 0;
       aoa.push([r.age, r.nam.mac, r.nu.mac, r.khac.mac, r.mac, r.chet, +cfr.toFixed(3)]);

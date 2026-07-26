@@ -136,7 +136,7 @@ tr.grand-total td { background: #fff4d6; font-weight: bold; color: #5a4500; }
 
   // ── Table ────────────────────────────────────────────────────────────────────
   var tbl = document.getElementById('tbl');
-  var thead = '<thead><tr><th style="text-align:left">Phân độ lâm sàng</th><th>Số ca</th><th>Tỷ lệ</th><th>Tử vong</th><th>CFR trong nhóm</th></tr></thead>';
+  var thead = '<thead><tr><th style="text-align:left">Phân độ lâm sàng</th><th>Số ca</th><th>Tỷ lệ</th><th>Tử vong</th><th>Tỷ lệ tử vong trong nhóm (CFR)</th></tr></thead>';
   var tbody = '<tbody>';
   rows.forEach(function (r) {
     var pct = grandMac > 0 ? (r.mac / grandMac * 100) : 0;
@@ -266,7 +266,7 @@ tr.grand-total td { background: #fff4d6; font-weight: bold; color: #5a4500; }
   }
 
   document.getElementById('btn-export').addEventListener('click', function () {
-    var aoa = [['Phân độ lâm sàng', 'Số ca', 'Tỷ lệ (%)', 'Tử vong', 'CFR trong nhóm (%)']];
+    var aoa = [['Phân độ lâm sàng', 'Số ca', 'Tỷ lệ (%)', 'Tử vong', 'Tỷ lệ tử vong trong nhóm (CFR) (%)']];
     rows.forEach(function (r) {
       var pct = grandMac > 0 ? (r.mac / grandMac * 100) : 0;
       var cfr = r.mac > 0 ? (r.chet / r.mac * 100) : 0;
