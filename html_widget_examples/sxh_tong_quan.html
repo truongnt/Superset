@@ -61,7 +61,7 @@ body { margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }
   <div class="card">
     <p class="label">Đang điều trị</p>
     <p class="total" id="dang-dt">0</p>
-    <p class="compare" style="color:#888">tính đến hiện tại (mọi năm)</p>
+    <p class="compare" style="color:#888">trên tổng ca (YTD)</p>
   </div>
   <div class="card">
     <p class="label">Tỷ lệ tử vong</p>
@@ -103,21 +103,20 @@ body { margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }
   // Lũy kế từ đầu năm đến hết tháng hiện tại (YTD), so với CÙNG SỐ THÁNG của
   // năm trước — không dùng bộ lọc "Thời gian" của dashboard (widget này luôn
   // tự tính đủ lịch sử để so sánh cùng kỳ, giống cách đường cong dịch tễ tự
-  // quản lý phạm vi năm của nó). "Đang điều trị" là snapshot hiện tại, cộng
-  // dồn qua MỌI năm (SUM theo tháng cộng lại đúng bằng tổng không group).
-  var cur = { mac: 0, chet: 0 };
+  // quản lý phạm vi năm của nó). "Đang điều trị" dùng CÙNG khung thời gian
+  // YTD với "Tổng ca" (không lấy toàn thời gian nữa) để 2 số cùng 1 chart
+  // luôn so sánh được với nhau — lưu ý bản thân trường "đang điều trị" là
+  // trạng thái ghi nhận lần cuối, không phải số đang nằm viện thực tế.
+  var cur = { mac: 0, chet: 0, dangDt: 0 };
   var prior = { mac: 0, chet: 0 };
-  var dangDieuTriAllTime = 0;
 
   data.forEach(function (r) {
-    dangDieuTriAllTime += num(r, COL_DANGDT);
-
     var ts = toMs(r[COL_THANG]);
     if (ts == null || ts > nowMs) return; // bỏ dữ liệu rác/ngày tương lai
     var d = new Date(ts);
     var y = d.getFullYear(), m = d.getMonth() + 1;
     if (y === curYear && m <= curMonth) {
-      cur.mac += num(r, COL_MAC); cur.chet += num(r, COL_CHET);
+      cur.mac += num(r, COL_MAC); cur.chet += num(r, COL_CHET); cur.dangDt += num(r, COL_DANGDT);
     } else if (y === priorYear && m <= curMonth) {
       prior.mac += num(r, COL_MAC); prior.chet += num(r, COL_CHET);
     }
@@ -125,7 +124,7 @@ body { margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }
 
   document.getElementById('tong-ca').textContent = fmt(cur.mac);
   document.getElementById('tu-vong').textContent = fmt(cur.chet);
-  document.getElementById('dang-dt').textContent = fmt(dangDieuTriAllTime);
+  document.getElementById('dang-dt').textContent = fmt(cur.dangDt);
   var tyLe = cur.mac > 0 ? (cur.chet / cur.mac * 100) : 0;
   document.getElementById('ty-le-tv').textContent = tyLe.toFixed(3) + '%';
 
