@@ -35,6 +35,7 @@ export default function EcdsDataTable({
   heatmapScope,
   pageSize,
   tableStyle,
+  rowLimit,
 }: EcdsDataTableProps) {
   const [sortCol, setSortCol] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -373,6 +374,23 @@ export default function EcdsDataTable({
           >
             ⬇ Excel
           </button>
+          {rowLimit > 0 && data.length >= rowLimit && (
+            <span
+              style={{
+                padding: '2px 8px',
+                borderRadius: 4,
+                fontSize: 11,
+                fontWeight: 600,
+                background: '#fef3c7',
+                color: '#92400e',
+                border: '1px solid #f5cf87',
+                marginLeft: 6,
+              }}
+              title={`Truy vấn dừng ở đúng giới hạn ${rowLimit.toLocaleString('vi-VN')} dòng - có thể còn dữ liệu chưa hiển thị.`}
+            >
+              ⚠️ Đã đạt giới hạn {rowLimit.toLocaleString('vi-VN')} dòng — dữ liệu có thể chưa đầy đủ, hãy lọc bớt (tỉnh/thời gian/bệnh...) để xem trọn vẹn.
+            </span>
+          )}
         </span>
 
         {totalPages > 1 && (

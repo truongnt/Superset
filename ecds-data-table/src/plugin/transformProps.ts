@@ -103,5 +103,6 @@ export default function transformProps(chartProps: ChartProps): EcdsDataTablePro
     heatmapScope: rfd.heatmap_scope ?? 'column',
     pageSize: rfd.page_size ?? 50,
     tableStyle,
+    rowLimit: rfd.row_limit ?? 0,
   };
 }

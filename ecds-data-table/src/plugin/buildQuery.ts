@@ -6,8 +6,18 @@ export default function buildQuery(formData: QueryFormData) {
 
   return buildQueryContext(formData, baseQueryObject => {
     if (isRaw) {
-      // Raw records: select explicit columns, no groupby / metrics
+      // Raw records: select explicit columns, no groupby / metrics.
+      // Superset's own backend GROUP BYs every selected column whenever
+      // metrics is empty (confirmed via a chart's "View query" output) —
+      // rows that match on every DISPLAYED column silently collapse into
+      // one, even if they're genuinely different records. row_id_column
+      // is always folded into the query (whether or not the chart author
+      // also chose to display it) so the GROUP BY can never merge two
+      // distinct rows.
       const allCols: string[] = fd.all_columns ?? [];
+      const rowIdCol: string | undefined = fd.row_id_column || undefined;
+      const queryCols =
+        rowIdCol && !allCols.includes(rowIdCol) ? [rowIdCol, ...allCols] : allCols;
       const orderByCols: string[] = fd.order_by_cols ?? [];
 
       // Parse "col ASC" / "col DESC" strings into [col, asc] tuples
@@ -20,7 +30,7 @@ export default function buildQuery(formData: QueryFormData) {
       return [
         {
           ...baseQueryObject,
-          columns: allCols.length > 0 ? allCols : undefined,
+          columns: queryCols.length > 0 ? queryCols : undefined,
           metrics: [],
           groupby: [],
           orderby: orderby.length > 0 ? orderby : baseQueryObject.orderby,

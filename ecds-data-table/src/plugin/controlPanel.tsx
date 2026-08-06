@@ -90,6 +90,31 @@ const config: ControlPanelConfig = {
         ],
         [
           {
+            name: 'row_id_column',
+            config: {
+              type: 'SelectControl',
+              label: 'Cột định danh duy nhất (chống gộp nhầm dòng)',
+              default: null,
+              clearable: true,
+              mapStateToProps: (state: any) => {
+                const cols: string[] =
+                  state.datasource?.columns?.map((c: any) => c.column_name) ?? [];
+                return { choices: cols.map(c => [c, c]) };
+              },
+              renderTrigger: false,
+              visibility: isRaw,
+              resetOnHide: false,
+              description:
+                'Superset tự GROUP BY toàn bộ cột đang hiển thị khi ở chế độ Raw records ' +
+                '(không có metric) — 2 dòng khác nhau nhưng trùng giá trị ở TẤT CẢ cột hiển thị ' +
+                'sẽ bị gộp thành 1. Chọn 1 cột định danh duy nhất cho mỗi dòng (mã ca, ID, ...) để ' +
+                'query luôn giữ nguyên số dòng thật — cột này được tự thêm vào query kể cả khi ' +
+                'không chọn hiển thị ở "Cột hiển thị".',
+            },
+          },
+        ],
+        [
+          {
             name: 'order_by_cols',
             config: {
               type: 'SelectControl',

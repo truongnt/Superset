@@ -24,4 +24,5 @@ export interface EcdsDataTableProps {
   heatmapScope: HeatmapScope;
   pageSize: number;
   tableStyle: TableStyle;
+  rowLimit: number;
 }
