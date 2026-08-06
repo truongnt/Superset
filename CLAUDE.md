@@ -78,6 +78,21 @@ This plugin is architecturally distinct enough to warrant reading `ecds-region-m
 - Projection is a hand-rolled simple Mercator implementation — deliberately no D3/Leaflet dependency.
 - Row limits: 10,000 for the primary datasource query, up to 200,000 for the map dataset fetch.
 
+## Editing the live Superset instance directly via SQL
+
+Beyond plugin development, a large share of work in this project is editing a **live production Superset + Postgres instance** directly via SQL (dashboards, charts, datasets, views) rather than through the Superset UI — because it lets config changes happen without driving the UI for every tweak. This has its own failure modes, independent of the plugin code above. Follow this checklist for any such edit:
+
+1. **Read-only first.** Fetch the exact current row/JSON and back it up (e.g. to a scratch file) before writing anything.
+2. **Copy the shape, don't guess it.** For a new chart, copy `params`' exact field shape from a live chart of the same `viz_type` — every viz_type has its own param shape; don't reconstruct it from `controlPanel.tsx` alone.
+3. **Transaction + verify + commit.** `autocommit=False` → mutate JSON in Python → `UPDATE` → check `rowcount==1` → commit (else rollback).
+4. **Always set `params.granularity_sqla`** on any chart created via direct SQL — it is never auto-populated outside the Explore UI. Without it, the dashboard's "Thời gian" native filter silently does nothing (no error — the chart just always shows all-time data).
+5. **Always rebuild `slices.query_context`** after touching `params`/`datasource_id`, mirroring that viz type's own `buildQuery` shape. A stale/NULL `query_context` breaks guest/embedded dashboard viewing with `"Guest user cannot modify chart payload"`. Verify at the `queries[0].columns`/`groupby`/`metrics` level too — a stale nested list can hide behind an otherwise-matching top-level `form_data`.
+6. **`position_json`/`json_metadata` edits**: validate every id reference exists in the new tree before committing. A `TABS` node's `meta` must be `{}`, never `null` (an explicit `null` crashes Superset's own dashboard Save with an opaque 500).
+7. **`ecds_data_table` in raw mode**: confirm `all_columns` includes one genuinely per-row-unique column (e.g. a case id), or Superset's backend silently `GROUP BY`s every displayed column and merges distinct records that happen to share the same displayed values.
+8. **Check `row_limit` against the deployment's `SQL_MAX_ROW`/`ROW_LIMIT`** (ask the user — it lives in `superset_config.py`, not this repo) before recommending an increase; raising a chart's own `row_limit` past that ceiling does nothing.
+9. **Verify with a live check after editing** — render the dashboard (Selenium or asking the user) rather than declaring done off a successful SQL run alone.
+10. **Plan before executing on anything ambiguous, multi-chart, or schema-changing** (new view/dataset, switching a chart's datasource, a filter whose intended UX isn't fully pinned down). State the concrete plan — which filters/views/charts, and *measured* (not estimated) performance impact — and get explicit confirmation before writing. A build-then-rollback cycle on 2026-07-29 (a filter feature built, verified, then fully undone because the design didn't match intent) is why this step is now mandatory, not optional, for this class of change.
+
 ## Repo-root housekeeping
 
 - `Superset_v1_stable.rar` is a checked-in stable-build archive — leave it alone unless a task explicitly concerns it.
